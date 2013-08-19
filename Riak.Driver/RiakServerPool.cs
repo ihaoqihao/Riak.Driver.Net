@@ -5,6 +5,7 @@ using System.Net;
 using Sodao.FastSocket.Client;
 using Sodao.FastSocket.SocketBase;
 using Sodao.FastSocket.SocketBase.Utils;
+using System.Threading;
 
 namespace Riak.Driver
 {
@@ -14,22 +15,30 @@ namespace Riak.Driver
     public sealed class RiakServerPool : Sodao.FastSocket.Client.IServerPool
     {
         #region Private Members
-        private readonly SocketConnector[] _nodes = null;
-        private readonly InterlockedStack<IConnection> _connections = new InterlockedStack<IConnection>();
+        private readonly IHost _host = null;
+
+        private readonly Dictionary<string, EndPoint> _dicServers = new Dictionary<string, EndPoint>();
+        private List<Tuple<string, EndPoint>> _listServers = null;
+        private readonly List<SocketConnector> _listConnectors = new List<SocketConnector>();
+
+        private volatile int _connectionCount = 0;
+        /// <summary>
+        /// key:server name + guid
+        /// </summary>
+        private readonly Dictionary<string, IConnection> _dicConnections = new Dictionary<string, IConnection>();
+        private readonly InterlockedStack<IConnection> _connPool = new InterlockedStack<IConnection>();
         #endregion
 
         #region Constructors
         /// <summary>
         /// new
         /// </summary>
-        /// <param name="servers"></param>
-        /// <exception cref="ArgumentNullException">servers is null.</exception>
-        public RiakServerPool(IHost host, IEnumerable<EndPoint> servers)
+        /// <param name="host"></param>
+        /// <exception cref="ArgumentNullException">host is null.</exception>
+        public RiakServerPool(IHost host)
         {
-            if (servers == null) throw new ArgumentNullException("servers");
-
-            this._nodes = servers.Select(c => new SocketConnector(c.ToString(), c, host, this.OnConnected, this.OnDisconnected)).ToArray();
-            for (int i = 0, l = this._nodes.Length; i < l; i++) this._nodes[i].Start();
+            if (host == null) throw new ArgumentNullException("host");
+            this._host = host;
         }
         #endregion
 
@@ -52,12 +61,21 @@ namespace Riak.Driver
         {
             throw new NotImplementedException();
         }
+        /// <summary>
         /// acquire
+        /// </summary>
+        /// <returns></returns>
         public IConnection Acquire()
         {
             IConnection connection;
-            if (this._connections.TryPop(out connection)) return connection;
-            return null;
+            if (this._connPool.TryPop(out connection)) return connection;
+
+            if (this._connectionCount > 30) return null;
+
+            lock (this)
+            {
+                if (this._dicServers.Count == 0) return null;
+            }
         }
         /// <summary>
         /// get all node names
@@ -65,7 +83,7 @@ namespace Riak.Driver
         /// <returns></returns>
         public string[] GetAllNodeNames()
         {
-            throw new NotImplementedException();
+            lock (this) return this._dicServers.Keys.ToArray();
         }
         /// <summary>
         /// register node
@@ -73,9 +91,14 @@ namespace Riak.Driver
         /// <param name="name"></param>
         /// <param name="endPoint"></param>
         /// <returns></returns>
-        public bool TryRegisterNode(string name, System.Net.EndPoint endPoint)
+        public bool TryRegisterNode(string name, EndPoint endPoint)
         {
-            throw new NotImplementedException();
+            lock (this)
+            {
+                if (this._dicServers.ContainsKey(name)) return false;
+                this._dicServers[name] = endPoint;
+                return true;
+            }
         }
         /// <summary>
         /// unregister node
@@ -84,7 +107,12 @@ namespace Riak.Driver
         /// <returns></returns>
         public bool UnRegisterNode(string name)
         {
-            throw new NotImplementedException();
+            lock (this)
+            {
+                if (!this._dicServers.ContainsKey(name)) return false;
+                this._dicServers.Remove(name);
+                return true;
+            }
         }
         #endregion
 
@@ -96,7 +124,7 @@ namespace Riak.Driver
         /// <param name="connection"></param>
         private void OnConnected(SocketConnector node, IConnection connection)
         {
-            this._connections.Push(connection);
+            this._connPool.Push(connection);
         }
         /// <summary>
         /// OnDisconnected
@@ -116,7 +144,7 @@ namespace Riak.Driver
         public void Release(IConnection connection)
         {
             if (connection == null || !connection.Active) return;
-            this._connections.Push(connection);
+            this._connPool.Push(connection);
         }
         #endregion
     }

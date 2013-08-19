@@ -3,13 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Net;
+using Sodao.FastSocket.Client;
 
 namespace Riak.Driver
 {
     /// <summary>
     /// riak client
     /// </summary>
-    public sealed class RiakClient : Sodao.FastSocket.Client.PooledSocketClient<RiakResponse>
+    public sealed class RiakClient : PooledSocketClient<RiakResponse>
     {
         /// <summary>
         /// new
@@ -32,7 +33,7 @@ namespace Riak.Driver
         /// <returns></returns>
         protected override Sodao.FastSocket.Client.IServerPool InitServerPool()
         {
-            return new RiakServerPool(this, null);
+            return new RiakServerPool(this);
         }
     }
 }
