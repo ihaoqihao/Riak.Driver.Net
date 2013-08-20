@@ -4,8 +4,8 @@ using System.Linq;
 using System.Net;
 using Sodao.FastSocket.Client;
 using Sodao.FastSocket.SocketBase;
-using Sodao.FastSocket.SocketBase.Utils;
 using System.Threading;
+using System.Collections.Concurrent;
 
 namespace Riak.Driver
 {
@@ -17,16 +17,32 @@ namespace Riak.Driver
         #region Private Members
         private readonly IHost _host = null;
 
-        private readonly Dictionary<string, EndPoint> _dicServers = new Dictionary<string, EndPoint>();
-        private List<Tuple<string, EndPoint>> _listServers = null;
-        private readonly List<SocketConnector> _listConnectors = new List<SocketConnector>();
-
-        private volatile int _connectionCount = 0;
         /// <summary>
-        /// key:server name + guid
+        /// key:node name
         /// </summary>
-        private readonly Dictionary<string, IConnection> _dicConnections = new Dictionary<string, IConnection>();
-        private readonly InterlockedStack<IConnection> _connPool = new InterlockedStack<IConnection>();
+        private readonly Dictionary<string, EndPoint> _dicNodes =
+            new Dictionary<string, EndPoint>();
+        /// <summary>
+        /// node array
+        /// </summary>
+        private Tuple<string, EndPoint>[] _nodes = null;
+
+        private volatile int _connectedCount = 0;
+        /// <summary>
+        /// key:node name + guid
+        /// </summary>
+        private readonly Dictionary<string, IConnection> _dicConnections =
+            new Dictionary<string, IConnection>();
+        /// <summary>
+        /// key:node name + guid
+        /// </summary>
+        private readonly Dictionary<string, SocketConnector> _dicConnector =
+            new Dictionary<string, SocketConnector>();
+        /// <summary>
+        /// connection stack pool.
+        /// </summary>
+        private readonly ConcurrentStack<IConnection> _connectionPool =
+            new ConcurrentStack<IConnection>();
         #endregion
 
         #region Constructors
@@ -68,14 +84,22 @@ namespace Riak.Driver
         public IConnection Acquire()
         {
             IConnection connection;
-            if (this._connPool.TryPop(out connection)) return connection;
+            if (this._connectionPool.TryPop(out connection)) return connection;
 
-            if (this._connectionCount > 30) return null;
+            if (this._connectedCount > 30) return null;
 
+            SocketConnector connector = null;
             lock (this)
             {
-                if (this._dicServers.Count == 0) return null;
+                if (this._nodes.Length == 0) return null;
+
+                var node = this._nodes[new Random().Next(this._nodes.Length)];
+                connector = new SocketConnector(string.Concat(node.Item1, "_", Guid.NewGuid().ToString()), node.Item2, this._host,
+                    this.OnConnected, this.OnDisconnected);
+                this._dicConnector.Add(connector.Name, connector);
             }
+            connector.Start();
+            return null;
         }
         /// <summary>
         /// get all node names
@@ -83,7 +107,7 @@ namespace Riak.Driver
         /// <returns></returns>
         public string[] GetAllNodeNames()
         {
-            lock (this) return this._dicServers.Keys.ToArray();
+            lock (this) return this._dicNodes.Keys.ToArray();
         }
         /// <summary>
         /// register node
@@ -95,8 +119,10 @@ namespace Riak.Driver
         {
             lock (this)
             {
-                if (this._dicServers.ContainsKey(name)) return false;
-                this._dicServers[name] = endPoint;
+                if (this._dicNodes.ContainsKey(name)) return false;
+
+                this._dicNodes[name] = endPoint;
+                this._dicNodes.Select(c => new Tuple<string, EndPoint>(c.Key, c.Value)).ToArray();
                 return true;
             }
         }
@@ -109,8 +135,28 @@ namespace Riak.Driver
         {
             lock (this)
             {
-                if (!this._dicServers.ContainsKey(name)) return false;
-                this._dicServers.Remove(name);
+                if (!this._dicNodes.ContainsKey(name)) return false;
+
+                this._dicNodes.Remove(name);
+                this._dicNodes.Select(c => new Tuple<string, EndPoint>(c.Key, c.Value)).ToArray();
+
+                //stop connectors
+                var keys = this._dicConnector.Keys.Where(c => c.StartsWith(name)).ToArray();
+                for (int i = 0, l = keys.Length; i < l; i++)
+                {
+                    var connector = this._dicConnector[keys[i]];
+                    this._dicConnections.Remove(keys[i]);
+                    connector.Stop();
+                }
+                //disconnect
+                keys = this._dicConnections.Keys.Where(c => c.StartsWith(name)).ToArray();
+                for (int i = 0, l = keys.Length; i < l; i++)
+                {
+                    var connection = this._dicConnections[keys[i]];
+                    this._dicConnections.Remove(keys[i]);
+                    connection.BeginDisconnect();
+                }
+
                 return true;
             }
         }
@@ -124,7 +170,11 @@ namespace Riak.Driver
         /// <param name="connection"></param>
         private void OnConnected(SocketConnector node, IConnection connection)
         {
-            this._connPool.Push(connection);
+            lock (this)
+            {
+
+            }
+            this._connectionPool.Push(connection);
         }
         /// <summary>
         /// OnDisconnected
@@ -141,10 +191,11 @@ namespace Riak.Driver
         /// release connection
         /// </summary>
         /// <param name="connection"></param>
+        /// <exception cref="ArgumentNullException">connection is null.</exception>
         public void Release(IConnection connection)
         {
-            if (connection == null || !connection.Active) return;
-            this._connPool.Push(connection);
+            if (connection == null) throw new ArgumentNullException("connection");
+            if (connection.Active) this._connectionPool.Push(connection);
         }
         #endregion
     }

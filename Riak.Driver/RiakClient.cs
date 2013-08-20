@@ -1,9 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Net;
-using Sodao.FastSocket.Client;
+﻿using Sodao.FastSocket.Client;
+using Sodao.FastSocket.SocketBase;
 
 namespace Riak.Driver
 {
@@ -12,6 +8,8 @@ namespace Riak.Driver
     /// </summary>
     public sealed class RiakClient : PooledSocketClient<RiakResponse>
     {
+        private RiakServerPool _serverPool = null;
+
         /// <summary>
         /// new
         /// </summary>
@@ -31,9 +29,28 @@ namespace Riak.Driver
         /// init server pool
         /// </summary>
         /// <returns></returns>
-        protected override Sodao.FastSocket.Client.IServerPool InitServerPool()
+        protected override IServerPool InitServerPool()
         {
-            return new RiakServerPool(this);
+            return this._serverPool = new RiakServerPool(this);
+        }
+        /// <summary>
+        /// OnSendCallback
+        /// </summary>
+        /// <param name="connection"></param>
+        /// <param name="e"></param>
+        protected override void OnSendCallback(IConnection connection, SendCallbackEventArgs e)
+        {
+            base.OnSendCallback(connection, e);
+
+            if (e.Status == SendCallbackStatus.Success)
+            {
+                //try send next request.
+                var request = base.DequeueFromPendingQueue();
+                if (request == null) { this._serverPool.Release(connection); return; }
+                this.Send(request);
+                return;
+            }
+            this._serverPool.Release(connection);
         }
     }
 }
