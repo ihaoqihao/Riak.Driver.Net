@@ -1,4 +1,5 @@
 ﻿using System;
+using Sodao.FastSocket.Client;
 using Sodao.FastSocket.Client.Protocol;
 using Sodao.FastSocket.SocketBase;
 using Sodao.FastSocket.SocketBase.Utils;
@@ -42,7 +43,12 @@ namespace Riak.Driver
             var bytes = new byte[len - 1];
             Buffer.BlockCopy(buffer.Array, buffer.Offset + 5, bytes, 0, bytes.Length);
 
-            return new RiakResponse(-1, messageCode, bytes);
+            //try get seqId
+            int seqId = -1;
+            var request = connection.UserData as Request<RiakResponse>;
+            if (request != null) seqId = request.SeqID;
+
+            return new RiakResponse(seqId, messageCode, bytes);
         }
     }
 }

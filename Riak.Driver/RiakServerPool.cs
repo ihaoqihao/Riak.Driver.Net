@@ -1,11 +1,11 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Threading;
 using Sodao.FastSocket.Client;
 using Sodao.FastSocket.SocketBase;
-using System.Threading;
-using System.Collections.Concurrent;
 
 namespace Riak.Driver
 {
@@ -17,32 +17,13 @@ namespace Riak.Driver
         #region Private Members
         private readonly IHost _host = null;
 
-        /// <summary>
-        /// key:node name
-        /// </summary>
-        private readonly Dictionary<string, EndPoint> _dicNodes =
-            new Dictionary<string, EndPoint>();
-        /// <summary>
-        /// node array
-        /// </summary>
+        private readonly Dictionary<string, EndPoint> _dicNodes = new Dictionary<string, EndPoint>();
         private Tuple<string, EndPoint>[] _nodes = null;
 
-        private volatile int _connectedCount = 0;
-        /// <summary>
-        /// key:node name + guid
-        /// </summary>
-        private readonly Dictionary<string, IConnection> _dicConnections =
-            new Dictionary<string, IConnection>();
-        /// <summary>
-        /// key:node name + guid
-        /// </summary>
-        private readonly Dictionary<string, SocketConnector> _dicConnector =
-            new Dictionary<string, SocketConnector>();
-        /// <summary>
-        /// connection stack pool.
-        /// </summary>
-        private readonly ConcurrentStack<IConnection> _connectionPool =
-            new ConcurrentStack<IConnection>();
+        private int _connectedCount = 0;
+        private readonly List<Tuple<string, IConnection>> _listConnections = new List<Tuple<string, IConnection>>();
+        private readonly List<SocketConnector> _listConnector = new List<SocketConnector>();
+        private readonly ConcurrentStack<IConnection> _connectionPool = new ConcurrentStack<IConnection>();
         #endregion
 
         #region Constructors
@@ -75,7 +56,7 @@ namespace Riak.Driver
         /// <returns></returns>
         public IConnection Acquire(byte[] hash)
         {
-            throw new NotImplementedException();
+            return this.Acquire();
         }
         /// <summary>
         /// acquire
@@ -85,18 +66,17 @@ namespace Riak.Driver
         {
             IConnection connection;
             if (this._connectionPool.TryPop(out connection)) return connection;
-
-            if (this._connectedCount > 30) return null;
+            if (Thread.VolatileRead(ref this._connectedCount) > 30) return null;
 
             SocketConnector connector = null;
             lock (this)
             {
-                if (this._nodes.Length == 0) return null;
+                if (this._connectedCount >= 40 || this._nodes == null || this._nodes.Length == 0) return null;
 
+                Interlocked.Increment(ref this._connectedCount);
                 var node = this._nodes[new Random().Next(this._nodes.Length)];
-                connector = new SocketConnector(string.Concat(node.Item1, "_", Guid.NewGuid().ToString()), node.Item2, this._host,
-                    this.OnConnected, this.OnDisconnected);
-                this._dicConnector.Add(connector.Name, connector);
+                connector = new SocketConnector(node.Item1, node.Item2, this._host, this.OnConnected, this.OnDisconnected);
+                this._listConnector.Add(connector);
             }
             connector.Start();
             return null;
@@ -122,7 +102,7 @@ namespace Riak.Driver
                 if (this._dicNodes.ContainsKey(name)) return false;
 
                 this._dicNodes[name] = endPoint;
-                this._dicNodes.Select(c => new Tuple<string, EndPoint>(c.Key, c.Value)).ToArray();
+                this._nodes = this._dicNodes.Select(c => new Tuple<string, EndPoint>(c.Key, c.Value)).ToArray();
                 return true;
             }
         }
@@ -133,32 +113,34 @@ namespace Riak.Driver
         /// <returns></returns>
         public bool UnRegisterNode(string name)
         {
+            bool flag;
+            SocketConnector[] stopConnectors = null;
+            Tuple<string, IConnection>[] stopConnections = null;
+
             lock (this)
             {
-                if (!this._dicNodes.ContainsKey(name)) return false;
-
-                this._dicNodes.Remove(name);
-                this._dicNodes.Select(c => new Tuple<string, EndPoint>(c.Key, c.Value)).ToArray();
-
-                //stop connectors
-                var keys = this._dicConnector.Keys.Where(c => c.StartsWith(name)).ToArray();
-                for (int i = 0, l = keys.Length; i < l; i++)
+                if (flag = this._dicNodes.ContainsKey(name))
                 {
-                    var connector = this._dicConnector[keys[i]];
-                    this._dicConnections.Remove(keys[i]);
-                    connector.Stop();
-                }
-                //disconnect
-                keys = this._dicConnections.Keys.Where(c => c.StartsWith(name)).ToArray();
-                for (int i = 0, l = keys.Length; i < l; i++)
-                {
-                    var connection = this._dicConnections[keys[i]];
-                    this._dicConnections.Remove(keys[i]);
-                    connection.BeginDisconnect();
+                    this._dicNodes.Remove(name);
+                    this._nodes = this._dicNodes.Select(c => new Tuple<string, EndPoint>(c.Key, c.Value)).ToArray();
                 }
 
-                return true;
+                //remove connectors
+                stopConnectors = this._listConnector.Where(c => c.Name == name).ToArray();
+                for (int i = 0, l = stopConnectors.Length; i < l; i++)
+                {
+                    Interlocked.Decrement(ref this._connectedCount);
+                    this._listConnector.Remove(stopConnectors[i]);
+                }
+                //remove connections
+                stopConnections = this._listConnections.Where(c => c.Item1 == name).ToArray();
+                for (int i = 0, l = stopConnections.Length; i < l; i++) this._listConnections.Remove(stopConnections[i]);
             }
+
+            for (int i = 0, l = stopConnectors.Length; i < l; i++) stopConnectors[i].Stop();
+            for (int i = 0, l = stopConnections.Length; i < l; i++) stopConnections[i].Item2.BeginDisconnect();
+
+            return flag;
         }
         #endregion
 
@@ -170,11 +152,21 @@ namespace Riak.Driver
         /// <param name="connection"></param>
         private void OnConnected(SocketConnector node, IConnection connection)
         {
+            this.Connected(node.Name, connection);
+
+            bool isActive = false;
             lock (this)
             {
-
+                if (isActive = this._dicNodes.ContainsKey(node.Name)) this._listConnections.Add(new Tuple<string, IConnection>(node.Name, connection));
             }
-            this._connectionPool.Push(connection);
+            if (isActive)
+            {
+                this._connectionPool.Push(connection);
+                if (this.ServerAvailable != null) this.ServerAvailable();
+                return;
+            }
+
+            connection.BeginDisconnect();
         }
         /// <summary>
         /// OnDisconnected
@@ -183,6 +175,11 @@ namespace Riak.Driver
         /// <param name="connection"></param>
         private void OnDisconnected(SocketConnector node, IConnection connection)
         {
+            lock (this)
+            {
+                var hit = this._listConnections.Find(c => c.Item2 == connection);
+                if (hit != null) this._listConnections.Remove(hit);
+            }
         }
         #endregion
 
