@@ -34,10 +34,11 @@
   <ItemGroup>
     <Reference Include="FastSocket.Client, Version=1.0.0.5, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\fastsocket_client.1.0.0.13\lib\net40\FastSocket.Client.dll</HintPath>
+      <HintPath>..\packages\fastsocket_client.1.0.0.14\lib\net40\FastSocket.Client.dll</HintPath>
     </Reference>
-    <Reference Include="FastSocket.SocketBase">
-      <HintPath>..\packages\fastsocket_base.1.0.0.11\lib\net40\FastSocket.SocketBase.dll</HintPath>
+    <Reference Include="FastSocket.SocketBase, Version=1.0.0.5, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\fastsocket_base.1.0.0.12\lib\net40\FastSocket.SocketBase.dll</HintPath>
     </Reference>
     <Reference Include="protobuf-net">
       <HintPath>..\packages\protobuf-net.2.0.0.640\lib\net40\protobuf-net.dll</HintPath>
