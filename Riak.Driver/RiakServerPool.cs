@@ -15,6 +15,7 @@ namespace Riak.Driver
     public sealed class RiakServerPool : Sodao.FastSocket.Client.IServerPool
     {
         #region Private Members
+        private int _maxPoolSize = 30;
         private readonly IHost _host = null;
 
         private readonly Dictionary<string, EndPoint> _dicNodes = new Dictionary<string, EndPoint>();
@@ -22,7 +23,6 @@ namespace Riak.Driver
 
         private int _connectedCount = 0;
         private readonly List<Tuple<string, IConnection>> _listConnections = new List<Tuple<string, IConnection>>();
-        private readonly List<SocketConnector> _listConnector = new List<SocketConnector>();
         private readonly ConcurrentStack<IConnection> _connectionPool = new ConcurrentStack<IConnection>();
         #endregion
 
@@ -66,19 +66,19 @@ namespace Riak.Driver
         {
             IConnection connection;
             if (this._connectionPool.TryPop(out connection)) return connection;
-            if (Thread.VolatileRead(ref this._connectedCount) > 30) return null;
+            if (Thread.VolatileRead(ref this._connectedCount) >= this._maxPoolSize) return null;
 
-            SocketConnector connector = null;
+            Tuple<string, EndPoint> node = null;
             lock (this)
             {
-                if (this._connectedCount >= 40 || this._nodes == null || this._nodes.Length == 0) return null;
+                if (Thread.VolatileRead(ref this._connectedCount) >= this._maxPoolSize) return null;
+                if (this._nodes == null || this._nodes.Length == 0) return null;
 
                 Interlocked.Increment(ref this._connectedCount);
-                var node = this._nodes[new Random().Next(this._nodes.Length)];
-                connector = new SocketConnector(node.Item1, node.Item2, this._host, this.OnConnected, this.OnDisconnected);
-                this._listConnector.Add(connector);
+                node = this._nodes[new Random().Next(this._nodes.Length)];
             }
-            connector.Start();
+
+            this.BeginConnect(node.Item1, node.Item2);
             return null;
         }
         /// <summary>
@@ -114,72 +114,81 @@ namespace Riak.Driver
         public bool UnRegisterNode(string name)
         {
             bool flag;
-            SocketConnector[] stopConnectors = null;
-            Tuple<string, IConnection>[] stopConnections = null;
+            Tuple<string, IConnection>[] arr = null;
 
             lock (this)
             {
+                //remove node.
                 if (flag = this._dicNodes.ContainsKey(name))
                 {
                     this._dicNodes.Remove(name);
                     this._nodes = this._dicNodes.Select(c => new Tuple<string, EndPoint>(c.Key, c.Value)).ToArray();
                 }
-
-                //remove connectors
-                stopConnectors = this._listConnector.Where(c => c.Name == name).ToArray();
-                for (int i = 0, l = stopConnectors.Length; i < l; i++)
-                {
-                    Interlocked.Decrement(ref this._connectedCount);
-                    this._listConnector.Remove(stopConnectors[i]);
-                }
                 //remove connections
-                stopConnections = this._listConnections.Where(c => c.Item1 == name).ToArray();
-                for (int i = 0, l = stopConnections.Length; i < l; i++) this._listConnections.Remove(stopConnections[i]);
+                arr = this._listConnections.Where(c => c.Item1 == name).ToArray();
+                for (int i = 0, l = arr.Length; i < l; i++)
+                    this._listConnections.Remove(arr[i]);
             }
 
-            for (int i = 0, l = stopConnectors.Length; i < l; i++) stopConnectors[i].Stop();
-            for (int i = 0, l = stopConnections.Length; i < l; i++) stopConnections[i].Item2.BeginDisconnect();
-
+            //disconnect conection
+            for (int i = 0, l = arr.Length; i < l; i++) arr[i].Item2.BeginDisconnect();
             return flag;
         }
         #endregion
 
         #region Private Methods
         /// <summary>
-        /// OnConnected
+        /// begin connect
         /// </summary>
-        /// <param name="node"></param>
-        /// <param name="connection"></param>
-        private void OnConnected(SocketConnector node, IConnection connection)
+        /// <param name="name"></param>
+        /// <param name="endPoint"></param>
+        private void BeginConnect(string name, EndPoint endPoint)
         {
-            this.Connected(node.Name, connection);
-
-            bool isActive = false;
-            lock (this)
+            SocketConnector.BeginConnect(endPoint, this._host, connection =>
             {
-                if (isActive = this._dicNodes.ContainsKey(node.Name)) this._listConnections.Add(new Tuple<string, IConnection>(node.Name, connection));
-            }
-            if (isActive)
-            {
-                this._connectionPool.Push(connection);
-                if (this.ServerAvailable != null) this.ServerAvailable();
-                return;
-            }
+                //connect failed.
+                if (connection == null) { Interlocked.Decrement(ref this._connectedCount); return; }
 
-            connection.BeginDisconnect();
+                //handle dissconnected
+                connection.Disconnected += (conn, ex) =>
+                {
+                    lock (this)
+                    {
+                        var hit = this._listConnections.Find(c => c.Item2 == conn);
+                        if (hit == null) return;
+                        Interlocked.Decrement(ref this._connectedCount);
+                        this._listConnections.Remove(hit);
+                    }
+                };
+
+                this.Connected(name, connection);
+
+                bool isActive = false;
+                lock (this)
+                {
+                    if (isActive = this._dicNodes.ContainsKey(name))
+                        this._listConnections.Add(new Tuple<string, IConnection>(name, connection));
+                }
+                if (isActive)
+                {
+                    this._connectionPool.Push(connection);
+                    this.ServerAvailable();
+                    return;
+                }
+
+                connection.BeginDisconnect();
+            });
         }
+        #endregion
+
+        #region Public Properties
         /// <summary>
-        /// OnDisconnected
+        /// get or set max pool size.
         /// </summary>
-        /// <param name="node"></param>
-        /// <param name="connection"></param>
-        private void OnDisconnected(SocketConnector node, IConnection connection)
+        public int MaxPoolSize
         {
-            lock (this)
-            {
-                var hit = this._listConnections.Find(c => c.Item2 == connection);
-                if (hit != null) this._listConnections.Remove(hit);
-            }
+            get { return this._maxPoolSize; }
+            set { this._maxPoolSize = value; }
         }
         #endregion
 

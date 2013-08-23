@@ -49,6 +49,15 @@ namespace Riak.Driver
             return this._serverPool = new RiakServerPool(this);
         }
         /// <summary>
+        /// OnServerPoolServerAvailable
+        /// </summary>
+        protected override void OnServerPoolServerAvailable()
+        {
+            var request = base.DequeueFromPendingQueue();
+            if (request == null) return;
+            base.Send(request);
+        }
+        /// <summary>
         /// OnStartSending
         /// </summary>
         /// <param name="connection"></param>
@@ -56,6 +65,7 @@ namespace Riak.Driver
         protected override void OnStartSending(IConnection connection, Packet packet)
         {
             connection.UserData = packet;
+            packet.Tag = connection;
             base.OnStartSending(connection, packet);
         }
         /// <summary>
@@ -65,24 +75,70 @@ namespace Riak.Driver
         /// <param name="response"></param>
         protected override void OnResponse(IConnection connection, RiakResponse response)
         {
+            var packet = connection.UserData as Packet;
+            if (packet != null) packet.Tag = null;
+            connection.UserData = null;
+
+            //try send next request from pending queue.
             var request = base.DequeueFromPendingQueue();
             if (request == null) { this._serverPool.Release(connection); return; };
             connection.BeginSend(request);
         }
         #endregion
 
-        public Task Put(string bucket, string key, string value)
+        #region Private Methods
+        /// <summary>
+        /// execute
+        /// </summary>
+        /// <typeparam name="TResult"></typeparam>
+        /// <param name="cmdName"></param>
+        /// <param name="payload"></param>
+        /// <param name="funResult"></param>
+        /// <param name="asyncState"></param>
+        /// <returns></returns>
+        private Task<TResult> Execute<TResult>(string cmdName, byte[] payload, Func<RiakResponse, TResult> funResult, object asyncState = null)
         {
-            var source = new TaskCompletionSource<bool>();
+            var source = new TaskCompletionSource<TResult>();
 
+            Request<RiakResponse> request = null;
+            request = new Request<RiakResponse>(base.NextRequestSeqID(), cmdName, payload, ex =>
+            {
+                var rex = ex as RequestException;
+                if (rex != null && rex.Error == RequestException.Errors.ReceiveTimeout)
+                {
+                    var connection = request.Tag as IConnection;
+                    if (connection != null) connection.BeginDisconnect();
+                }
+                source.TrySetException(ex);
+            },
+            response =>
+            {
+                TResult result;
+                try { result = funResult(response); }
+                catch (Exception ex) { source.TrySetException(ex); return; }
+                source.TrySetResult(result);
+            });
+
+            this.Send(request);
+            return source.Task;
+        }
+        #endregion
+
+        /// <summary>
+        /// put
+        /// </summary>
+        /// <param name="bucket"></param>
+        /// <param name="key"></param>
+        /// <param name="value"></param>
+        /// <param name="asyncState"></param>
+        /// <returns></returns>
+        public Task Put(string bucket, string key, string value, object asyncState = null)
+        {
             var req = new Messages.RpbPutReq
             {
                 key = Encoding.UTF8.GetBytes(key),
                 bucket = Encoding.UTF8.GetBytes(bucket),
-                content = new Messages.RpbContent
-                {
-                    value = Encoding.UTF8.GetBytes(value)
-                }
+                content = new Messages.RpbContent { value = Encoding.UTF8.GetBytes(value) }
             };
 
             byte[] bytes = null;
@@ -95,13 +151,7 @@ namespace Riak.Driver
             bytes[4] = Messages.Codes.RpbPutReq;
             Buffer.BlockCopy(Sodao.FastSocket.SocketBase.Utils.NetworkBitConverter.GetBytes(bytes.Length - 4), 0, bytes, 0, 4);
 
-            this.Send(new Request<RiakResponse>(base.NextRequestSeqID(), "put", bytes,
-                ex => source.TrySetException(ex),
-                (response) =>
-                {
-                    source.TrySetResult(true);
-                }));
-            return source.Task;
+            return Execute<bool>("put", bytes, c => true, asyncState);
         }
     }
 }

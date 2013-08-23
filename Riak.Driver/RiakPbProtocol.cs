@@ -11,9 +11,6 @@ namespace Riak.Driver
     /// http://docs.basho.com/riak/latest/dev/references/protocol-buffers/
     /// 00 00 00 07 09 0A 01 62 12 01 6B
     /// |----Len---|MC|----Message-----|
-    /// Len = 0x07
-    /// Message Code (MC) = 0x09 = RpbGetReq
-    /// RpbGetReq Message = 0x0A 0x01 0x62 0x12 0x01 0x6B
     /// </summary>
     public sealed class RiakPbProtocol : IProtocol<RiakResponse>
     {
