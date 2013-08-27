@@ -54,10 +54,12 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RiakClient.cs" />
     <Compile Include="RiakException.cs" />
+    <Compile Include="RiakObject.cs" />
     <Compile Include="RiakSocketClient.cs" />
     <Compile Include="RiakResponse.cs" />
     <Compile Include="RiakPbProtocol.cs" />
     <Compile Include="RiakServerPool.cs" />
+    <Compile Include="Utils\Extension.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Messages\riak.proto" />

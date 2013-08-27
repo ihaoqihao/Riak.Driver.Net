@@ -126,8 +126,7 @@ namespace Riak.Driver
                 }
                 //remove connections
                 arr = this._listConnections.Where(c => c.Item1 == name).ToArray();
-                for (int i = 0, l = arr.Length; i < l; i++)
-                    this._listConnections.Remove(arr[i]);
+                for (int i = 0, l = arr.Length; i < l; i++) this._listConnections.Remove(arr[i]);
             }
 
             //disconnect conection

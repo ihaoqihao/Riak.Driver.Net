@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Text;
+using System.Threading;
 using Sodao.FastSocket.Client;
 using Sodao.FastSocket.SocketBase;
 using Sodao.FastSocket.SocketBase.Utils;
@@ -81,34 +82,38 @@ namespace Riak.Driver
             connection.UserData = null;
 
             //try send next request from pending queue.
-            var request = base.DequeueFromPendingQueue();
-            if (request == null) { this._serverPool.Release(connection); return; };
-            connection.BeginSend(request);
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                var request = base.DequeueFromPendingQueue();
+                if (request == null) { this._serverPool.Release(connection); return; };
+                connection.BeginSend(request);
+            });
         }
         #endregion
 
-        #region Public Methods
+        #region Public Properties
         /// <summary>
-        /// execute
+        /// get or set max pool size
         /// </summary>
-        /// <typeparam name="TRequest"></typeparam>
-        /// <typeparam name="TResponse"></typeparam>
-        /// <param name="messageCode"></param>
+        public int MaxPoolSize
+        {
+            get { return this._serverPool.MaxPoolSize; }
+            set { this._serverPool.MaxPoolSize = value; }
+        }
+        #endregion
+
+        #region Execute
+        /// <summary>
+        /// Serialize
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="reqCode"></param>
         /// <param name="request"></param>
-        /// <param name="onError"></param>
-        /// <param name="onResponse"></param>
+        /// <returns></returns>
         /// <exception cref="ArgumentNullException">request is null</exception>
-        /// <exception cref="ArgumentNullException">onError is null</exception>
-        /// <exception cref="ArgumentNullException">onResponse is null</exception>
-        public void Execute<TRequest, TResponse>(byte messageCode, TRequest request,
-            Action<Exception> onError,
-            Action<TResponse> onResponse)
-            where TResponse : class
-            where TRequest : class
+        private byte[] Serialize<T>(byte reqCode, T request)
         {
             if (request == null) throw new ArgumentNullException("request");
-            if (onError == null) throw new ArgumentNullException("onError");
-            if (onResponse == null) throw new ArgumentNullException("onResponse");
 
             byte[] bytes = null;
             using (var ms = new MemoryStream())
@@ -117,11 +122,40 @@ namespace Riak.Driver
                 ProtoBuf.Serializer.Serialize(ms, request);
                 bytes = ms.ToArray();
             }
-            bytes[4] = messageCode;
+            bytes[4] = reqCode;
             Buffer.BlockCopy(NetworkBitConverter.GetBytes(bytes.Length - 4), 0, bytes, 0, 4);
 
+            return bytes;
+        }
+        /// <summary>
+        /// Deserialize
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="response"></param>
+        /// <returns></returns>
+        private T Deserialize<T>(RiakResponse response)
+        {
+            using (var ms = new MemoryStream(response.Payload)) return ProtoBuf.Serializer.Deserialize<T>(ms);
+        }
+        /// <summary>
+        /// Execute
+        /// </summary>
+        /// <param name="cmdName"></param>
+        /// <param name="bytes"></param>
+        /// <param name="respCode"></param>
+        /// <param name="onError"></param>
+        /// <param name="onResponse"></param>
+        /// <exception cref="ArgumentNullException">bytes is null</exception>
+        /// <exception cref="ArgumentNullException">onError is null</exception>
+        /// <exception cref="ArgumentNullException">onResponse is null</exception>
+        private void Execute(string cmdName, byte[] bytes, byte respCode, Action<Exception> onError, Action<RiakResponse> onResponse)
+        {
+            if (bytes == null) throw new ArgumentNullException("bytes");
+            if (onError == null) throw new ArgumentNullException("onError");
+            if (onResponse == null) throw new ArgumentNullException("onResponse");
+
             Request<RiakResponse> socketRequest = null;
-            socketRequest = new Request<RiakResponse>(base.NextRequestSeqID(), messageCode.ToString(), bytes, ex =>
+            this.Send(socketRequest = new Request<RiakResponse>(base.NextRequestSeqID(), cmdName, bytes, ex =>
             {
                 var rex = ex as RequestException;
                 //当receive timeout时，强制断开当前链接
@@ -134,23 +168,69 @@ namespace Riak.Driver
             },
             response =>
             {
-                if (response.MessageCode == Messages.Codes.RpbErrorResp)
+                if (response.MessageCode == Messages.Codes.ErrorResp)
                 {
-                    Messages.RpbErrorResp error = null;
-                    using (var ms = new MemoryStream(response.Payload))
-                        error = ProtoBuf.Serializer.Deserialize<Messages.RpbErrorResp>(ms);
-
+                    var error = this.Deserialize<Messages.RpbErrorResp>(response);
                     onError(new RiakException(error.errcode, Encoding.UTF8.GetString(error.errmsg)));
                     return;
                 }
-
-                TResponse riakResponse = null;
-                using (var ms = new MemoryStream(response.Payload))
-                    riakResponse = ProtoBuf.Serializer.Deserialize<TResponse>(ms);
-                onResponse(riakResponse);
-            });
-
-            this.Send(socketRequest);
+                if (response.MessageCode != respCode)
+                {
+                    onError(new RiakException(string.Concat("invalid response, expected is ", respCode.ToString(), ", but was is ", response.MessageCode.ToString())));
+                    return;
+                }
+                onResponse(response);
+            }));
+        }
+        /// <summary>
+        /// Execute
+        /// </summary>
+        /// <typeparam name="TRequest"></typeparam>
+        /// <typeparam name="TResponse"></typeparam>
+        /// <param name="reqCode"></param>
+        /// <param name="respCode"></param>
+        /// <param name="request"></param>
+        /// <param name="onError"></param>
+        /// <param name="callback"></param>
+        public void Execute<TRequest, TResponse>(byte reqCode, byte respCode, TRequest request, Action<Exception> onError, Action<TResponse> callback)
+        {
+            this.Execute(reqCode.ToString(), this.Serialize(reqCode, request), respCode, onError, response => callback(this.Deserialize<TResponse>(response)));
+        }
+        /// <summary>
+        /// Execute
+        /// </summary>
+        /// <typeparam name="TRequest"></typeparam>
+        /// <param name="reqCode"></param>
+        /// <param name="respCode"></param>
+        /// <param name="request"></param>
+        /// <param name="onError"></param>
+        /// <param name="callback"></param>
+        public void Execute<TRequest>(byte reqCode, byte respCode, TRequest request, Action<Exception> onError, Action callback)
+        {
+            this.Execute(reqCode.ToString(), this.Serialize(reqCode, request), respCode, onError, response => callback());
+        }
+        /// <summary>
+        /// Execute
+        /// </summary>
+        /// <typeparam name="TResponse"></typeparam>
+        /// <param name="reqCode"></param>
+        /// <param name="respCode"></param>
+        /// <param name="onError"></param>
+        /// <param name="callback"></param>
+        public void Execute<TResponse>(byte reqCode, byte respCode, Action<Exception> onError, Action<TResponse> callback)
+        {
+            this.Execute(reqCode.ToString(), new byte[] { 0, 0, 0, 1, reqCode }, respCode, onError, response => callback(this.Deserialize<TResponse>(response)));
+        }
+        /// <summary>
+        /// Execute
+        /// </summary>
+        /// <param name="reqCode"></param>
+        /// <param name="respCode"></param>
+        /// <param name="onError"></param>
+        /// <param name="callback"></param>
+        public void Execute(byte reqCode, byte respCode, Action<Exception> onError, Action callback)
+        {
+            this.Execute(reqCode.ToString(), new byte[] { 0, 0, 0, 1, reqCode }, respCode, onError, response => callback());
         }
         #endregion
     }

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Riak.Driver.Messages;
 
@@ -11,6 +12,7 @@ namespace Riak.Driver
     {
         #region Private Members
         private readonly RiakSocketClient _socket = null;
+        private readonly HashSet<string> _setCounter = new HashSet<string>();
         #endregion
 
         #region Constructors
@@ -25,36 +27,48 @@ namespace Riak.Driver
         }
         #endregion
 
-        #region Put
+        #region Object/Key Operations
+        /// <summary>
+        /// new
+        /// </summary>
+        /// <param name="value"></param>
+        /// <param name="asyncState"></param>
+        /// <returns></returns>
+        public Task<RiakObject> Put(RiakObject value, object asyncState = null)
+        {
+            return this.Put(value, false, asyncState);
+        }
         /// <summary>
         /// put
         /// </summary>
-        /// <param name="req"></param>
+        /// <param name="value"></param>
+        /// <param name="returnBody"></param>
         /// <param name="asyncState"></param>
         /// <returns></returns>
-        public Task<RpbPutResp> Put(RpbPutReq req, object asyncState = null)
+        public Task<RiakObject> Put(RiakObject value, bool returnBody = false, object asyncState = null)
         {
-            var souce = new TaskCompletionSource<RpbPutResp>(asyncState);
-            this._socket.Execute<RpbPutReq, RpbPutResp>(Codes.RpbPutReq, req, ex => souce.TrySetException(ex),
-                res => souce.TrySetResult(res));
-            return souce.Task;
+            if (value == null) throw new ArgumentNullException("value");
+
+            var request = value.ToRpbPutReq();
+            request.return_body = returnBody;
+
+            var source = new TaskCompletionSource<RiakObject>();
+            this._socket.Execute<RpbPutReq, RpbPutResp>(Codes.PutReq, Codes.PutResp, request,
+                ex => source.TrySetException(ex),
+                response =>
+                {
+                    if (returnBody)
+                    {
+                        source.TrySetResult(new RiakObject(value.Bucket, value.Key, response.vclock, response.content));
+                        return;
+                    }
+                    source.TrySetResult(value);
+                });
+            return source.Task;
         }
         #endregion
 
-        #region Get
-        /// <summary>
-        /// get
-        /// </summary>
-        /// <param name="req"></param>
-        /// <param name="asyncState"></param>
-        /// <returns></returns>
-        public Task<RpbGetResp> Get(RpbGetReq req, object asyncState = null)
-        {
-            var souce = new TaskCompletionSource<RpbGetResp>(asyncState);
-            this._socket.Execute<RpbGetReq, RpbGetResp>(Codes.RpbGetReq, req, ex => souce.TrySetException(ex),
-                res => souce.TrySetResult(res));
-            return souce.Task;
-        }
+        #region Bucket Operations
         #endregion
     }
 }

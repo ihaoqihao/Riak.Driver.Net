@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Riak.Driver.Utils;
 
 namespace Example
 {
@@ -16,30 +17,11 @@ namespace Example
 
             var riakClient = new Riak.Driver.RiakClient(riakSocketClient);
 
-            riakClient.Put(new Riak.Driver.Messages.RpbPutReq
+            //put
+            riakClient.Put(new Riak.Driver.RiakObject("bucket1", "key1", "value1"), true).ContinueWith(c =>
             {
-                bucket = Encoding.UTF8.GetBytes("bucket1"),
-                key = Encoding.UTF8.GetBytes("key1"),
-                content = new Riak.Driver.Messages.RpbContent
-                {
-                    value = BitConverter.GetBytes(DateTime.UtcNow.Ticks)
-                }
-            }).ContinueWith(c =>
-            {
-                if (c.IsFaulted) Console.WriteLine(c.Exception.ToString());
-                else Console.WriteLine(Encoding.UTF8.GetString(c.Result.vclock));
+                Console.WriteLine(c.Result.Value.GetString());
             });
-
-            riakClient.Get(new Riak.Driver.Messages.RpbGetReq
-            {
-                bucket = Encoding.UTF8.GetBytes("bucket1"),
-                key = Encoding.UTF8.GetBytes("key1")
-            }).ContinueWith(c =>
-            {
-                if (c.IsFaulted) Console.WriteLine(c.Exception.ToString());
-                else Console.WriteLine(BitConverter.ToInt64(c.Result.content[0].value, 0));
-            });
-
             Console.ReadLine();
         }
     }
