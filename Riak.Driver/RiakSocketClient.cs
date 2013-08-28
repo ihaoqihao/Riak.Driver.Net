@@ -135,6 +135,7 @@ namespace Riak.Driver
         /// <returns></returns>
         private T Deserialize<T>(RiakResponse response)
         {
+            if (response.Payload == null || response.Payload.Length == 0) return default(T);
             using (var ms = new MemoryStream(response.Payload)) return ProtoBuf.Serializer.Deserialize<T>(ms);
         }
         /// <summary>

@@ -47,6 +47,7 @@
     <Reference Include="System.XML" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="IndexResult.cs" />
     <Compile Include="Messages\Codes.cs" />
     <Compile Include="Messages\riak.cs" />
     <Compile Include="Messages\riak_kv.cs" />

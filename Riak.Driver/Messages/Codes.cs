@@ -113,7 +113,7 @@ namespace Riak.Driver.Messages
         /// <summary>
         /// index response
         /// </summary>
-        public const byte RpbIndexResp = 26;
+        public const byte IndexResp = 26;
         /// <summary>
         /// seach request
         /// </summary>
