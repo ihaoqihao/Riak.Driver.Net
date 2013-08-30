@@ -129,7 +129,8 @@ namespace Riak.Driver
         /// <param name="value"></param>
         /// <exception cref="ArgumentNullException">key is null or empty</exception>
         /// <exception cref="ArgumentNullException">value is null or empty</exception>
-        public void AddIndex(string key, string value)
+        /// <returns></returns>
+        public RiakObject AddIndex(string key, string value)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException("key");
             if (string.IsNullOrEmpty(value)) throw new ArgumentNullException("value");
@@ -139,6 +140,7 @@ namespace Riak.Driver
                 key = string.Concat(key, "_bin").GetBytes(),
                 value = value.GetBytes()
             });
+            return this;
         }
         /// <summary>
         /// add index
@@ -146,7 +148,8 @@ namespace Riak.Driver
         /// <param name="key"></param>
         /// <param name="value"></param>
         /// <exception cref="ArgumentNullException">key is null or empty</exception>
-        public void AddIndex(string key, int value)
+        /// <returns></returns>
+        public RiakObject AddIndex(string key, int value)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException("key");
 
@@ -155,6 +158,7 @@ namespace Riak.Driver
                 key = string.Concat(key, "_int").GetBytes(),
                 value = value.ToString().GetBytes()
             });
+            return this;
         }
         /// <summary>
         /// add index
@@ -162,7 +166,8 @@ namespace Riak.Driver
         /// <param name="key"></param>
         /// <param name="value"></param>
         /// <exception cref="ArgumentNullException">key is null or empty</exception>
-        public void AddIndex(string key, long value)
+        /// <returns></returns>
+        public RiakObject AddIndex(string key, long value)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException("key");
 
@@ -171,6 +176,7 @@ namespace Riak.Driver
                 key = string.Concat(key, "_int").GetBytes(),
                 value = value.ToString().GetBytes()
             });
+            return this;
         }
         /// <summary>
         /// remove index
@@ -179,15 +185,17 @@ namespace Riak.Driver
         /// <param name="value"></param>
         /// <exception cref="ArgumentNullException">key is null or empty</exception>
         /// <exception cref="ArgumentNullException">value is null or empty</exception>
-        public void RemoveIndex(string key, string value)
+        /// <returns></returns>
+        public RiakObject RemoveIndex(string key, string value)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException("key");
             if (string.IsNullOrEmpty(value)) throw new ArgumentNullException("value");
-            if (this.Content.indexes.Count == 0) return;
+            if (this.Content.indexes.Count == 0) return this;
 
             var hits = this.Content.indexes.Where(c => c.key.GetString().StartsWith(key) && c.value.GetString() == value).ToArray();
-            if (hits.Length == 0) return;
+            if (hits.Length == 0) return this;
             for (int i = 0, l = hits.Length; i < l; i++) this.Content.indexes.Remove(hits[i]);
+            return this;
         }
         /// <summary>
         /// remove index
@@ -195,14 +203,16 @@ namespace Riak.Driver
         /// <param name="key"></param>
         /// <param name="value"></param>
         /// <exception cref="ArgumentNullException">key is null or empty</exception>
-        public void RemoveIndex(string key, int value)
+        /// <returns></returns>
+        public RiakObject RemoveIndex(string key, int value)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException("key");
-            if (this.Content.indexes.Count == 0) return;
+            if (this.Content.indexes.Count == 0) return this;
 
             var hits = this.Content.indexes.Where(c => c.key.GetString().StartsWith(key) && c.value.GetString() == value.ToString()).ToArray();
-            if (hits.Length == 0) return;
+            if (hits.Length == 0) return this;
             for (int i = 0, l = hits.Length; i < l; i++) this.Content.indexes.Remove(hits[i]);
+            return this;
         }
         /// <summary>
         /// remove index
@@ -210,28 +220,32 @@ namespace Riak.Driver
         /// <param name="key"></param>
         /// <param name="value"></param>
         /// <exception cref="ArgumentNullException">key is null or empty</exception>
-        public void RemoveIndex(string key, long value)
+        /// <returns></returns>
+        public RiakObject RemoveIndex(string key, long value)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException("key");
-            if (this.Content.indexes.Count == 0) return;
+            if (this.Content.indexes.Count == 0) return this;
 
             var hits = this.Content.indexes.Where(c => c.key.GetString().StartsWith(key) && c.value.GetString() == value.ToString()).ToArray();
-            if (hits.Length == 0) return;
+            if (hits.Length == 0) return this;
             for (int i = 0, l = hits.Length; i < l; i++) this.Content.indexes.Remove(hits[i]);
+            return this;
         }
         /// <summary>
         /// remove index
         /// </summary>
         /// <param name="key"></param>
         /// <exception cref="ArgumentNullException">key is null or empty</exception>
-        public void RemoveIndex(string key)
+        /// <returns></returns>
+        public RiakObject RemoveIndex(string key)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException("key");
-            if (this.Content.indexes.Count == 0) return;
+            if (this.Content.indexes.Count == 0) return this;
 
             var hits = this.Content.indexes.Where(c => c.key.GetString().StartsWith(key)).ToArray();
-            if (hits.Length == 0) return;
+            if (hits.Length == 0) return this;
             for (int i = 0, l = hits.Length; i < l; i++) this.Content.indexes.Remove(hits[i]);
+            return this;
         }
         #endregion
 

@@ -177,11 +177,11 @@ namespace Riak.Driver
         /// <param name="returnTerms"></param>
         /// <param name="asyncState"></param>
         /// <returns></returns>
-        public Task<IndexResult> IndexQuery(string bucket, string indexName, long minValue, long maxValue,
+        public Task<IndexQueryResult> IndexQuery(string bucket, string indexName, long minValue, long maxValue,
             uint maxResults, byte[] continuation = null, bool returnTerms = false,
             object asyncState = null)
         {
-            var source = new TaskCompletionSource<IndexResult>(asyncState);
+            var source = new TaskCompletionSource<IndexQueryResult>(asyncState);
             this._socket.Execute<RpbIndexReq, RpbIndexResp>(Codes.IndexReq, Codes.IndexResp, new RpbIndexReq
             {
                 bucket = bucket.GetBytes(),
@@ -194,7 +194,7 @@ namespace Riak.Driver
                 range_max = maxValue.ToString().GetBytes()
             },
             ex => source.TrySetException(ex),
-            response => source.TrySetResult(new IndexResult(response)));
+            response => source.TrySetResult(new IndexQueryResult(response)));
             return source.Task;
         }
         /// <summary>
@@ -208,11 +208,11 @@ namespace Riak.Driver
         /// <param name="returnTerms"></param>
         /// <param name="asyncState"></param>
         /// <returns></returns>
-        public Task<IndexResult> IndexQuery(string bucket, string indexName, string value,
+        public Task<IndexQueryResult> IndexQuery(string bucket, string indexName, string value,
             uint maxResults, byte[] continuation = null, bool returnTerms = false,
             object asyncState = null)
         {
-            var source = new TaskCompletionSource<IndexResult>(asyncState);
+            var source = new TaskCompletionSource<IndexQueryResult>(asyncState);
             this._socket.Execute<RpbIndexReq, RpbIndexResp>(Codes.IndexReq, Codes.IndexResp, new RpbIndexReq
             {
                 bucket = bucket.GetBytes(),
@@ -224,7 +224,7 @@ namespace Riak.Driver
                 key = value.GetBytes()
             },
             ex => source.TrySetException(ex),
-            response => source.TrySetResult(new IndexResult(response)));
+            response => source.TrySetResult(new IndexQueryResult(response)));
             return source.Task;
         }
         #endregion

@@ -4,9 +4,9 @@ using Riak.Driver.Utils;
 namespace Riak.Driver
 {
     /// <summary>
-    /// index result
+    /// index query result
     /// </summary>
-    public sealed class IndexResult
+    public sealed class IndexQueryResult
     {
         /// <summary>
         /// get continuation
@@ -15,28 +15,28 @@ namespace Riak.Driver
         /// <summary>
         /// get results
         /// </summary>
-        public readonly Term[] Results;
+        public readonly IndexTerm[] Results;
 
         /// <summary>
         /// new
         /// </summary>
         /// <param name="response"></param>
-        public IndexResult(Messages.RpbIndexResp response)
+        public IndexQueryResult(Messages.RpbIndexResp response)
         {
             if (response == null)
             {
-                this.Results = new Term[0]; return;
+                this.Results = new IndexTerm[0]; return;
             }
 
             this.Continuation = response.continuation;
-            if (response.keys.Count > 0) this.Results = response.keys.Select(c => new Term(c.GetString())).ToArray();
-            else this.Results = response.results.Select(c => new Term(c.value.GetString(), c.key.GetString())).ToArray();
+            if (response.keys.Count > 0) this.Results = response.keys.Select(c => new IndexTerm(c.GetString())).ToArray();
+            else this.Results = response.results.Select(c => new IndexTerm(c.value.GetString(), c.key.GetString())).ToArray();
         }
 
         /// <summary>
         /// term
         /// </summary>
-        public class Term
+        public class IndexTerm
         {
             /// <summary>
             /// get key
@@ -45,13 +45,13 @@ namespace Riak.Driver
             /// <summary>
             /// get value
             /// </summary>
-            public readonly string Value;
+            public readonly string Term;
 
             /// <summary>
             /// new
             /// </summary>
             /// <param name="key"></param>
-            public Term(string key)
+            public IndexTerm(string key)
             {
                 this.Key = key;
             }
@@ -59,11 +59,11 @@ namespace Riak.Driver
             /// new
             /// </summary>
             /// <param name="key"></param>
-            /// <param name="value"></param>
-            public Term(string key, string value)
+            /// <param name="term"></param>
+            public IndexTerm(string key, string term)
             {
                 this.Key = key;
-                this.Value = value;
+                this.Term = term;
             }
         }
     }
