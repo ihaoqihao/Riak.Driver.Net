@@ -47,7 +47,7 @@ namespace Riak.Driver
         /// <summary>
         /// server available event
         /// </summary>
-        public event Action ServerAvailable;
+        public event Action<string, IConnection> ServerAvailable;
 
         /// <summary>
         /// acquire by hash
@@ -171,7 +171,7 @@ namespace Riak.Driver
                 if (isActive)
                 {
                     this._connectionPool.Push(connection);
-                    this.ServerAvailable();
+                    this.ServerAvailable(name, connection);
                     return;
                 }
 

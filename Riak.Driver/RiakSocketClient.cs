@@ -53,7 +53,9 @@ namespace Riak.Driver
         /// <summary>
         /// OnServerPoolServerAvailable
         /// </summary>
-        protected override void OnServerPoolServerAvailable()
+        /// <param name="name"></param>
+        /// <param name="connection"></param>
+        protected override void OnServerPoolServerAvailable(string name, IConnection connection)
         {
             var request = base.DequeueFromPendingQueue();
             if (request == null) return;
