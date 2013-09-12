@@ -20,10 +20,6 @@ namespace Riak.Driver
         /// </summary>
         public readonly byte[] Key;
         /// <summary>
-        /// get or setvalue
-        /// </summary>
-        public byte[] Value;
-        /// <summary>
         /// get vector clock
         /// </summary>
         public readonly byte[] VectorClock;
@@ -32,7 +28,7 @@ namespace Riak.Driver
         /// </summary>
         public readonly RiakObject[] Siblings;
 
-        private readonly Messages.RpbContent Content = null;
+        private readonly Messages.RpbContent _content = null;
         #endregion
 
         #region Constructors
@@ -89,9 +85,8 @@ namespace Riak.Driver
 
             this.Bucket = bucket;
             this.Key = key;
-            this.Value = content.value;
             this.VectorClock = vectorClock;
-            this.Content = content;
+            this._content = content;
         }
         /// <summary>
         /// new
@@ -108,6 +103,17 @@ namespace Riak.Driver
         }
         #endregion
 
+        #region Public Properties
+        /// <summary>
+        /// get or setvalue
+        /// </summary>
+        public byte[] Value
+        {
+            get { return this._content.value; }
+            set { this._content.value = value; }
+        }
+        #endregion
+
         #region Index
         /// <summary>
         /// get index by key.
@@ -119,8 +125,8 @@ namespace Riak.Driver
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException("key");
 
-            if (this.Content.indexes.Count == 0) return new byte[0][];
-            return this.Content.indexes.Where(c => c.key.GetString().StartsWith(key)).Select(c => c.value).ToArray();
+            if (this._content.indexes.Count == 0) return new byte[0][];
+            return this._content.indexes.Where(c => c.key.GetString().StartsWith(key)).Select(c => c.value).ToArray();
         }
         /// <summary>
         /// add index
@@ -135,7 +141,7 @@ namespace Riak.Driver
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException("key");
             if (string.IsNullOrEmpty(value)) throw new ArgumentNullException("value");
 
-            this.Content.indexes.Add(new Messages.RpbPair
+            this._content.indexes.Add(new Messages.RpbPair
             {
                 key = string.Concat(key, "_bin").GetBytes(),
                 value = value.GetBytes()
@@ -153,7 +159,7 @@ namespace Riak.Driver
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException("key");
 
-            this.Content.indexes.Add(new Messages.RpbPair
+            this._content.indexes.Add(new Messages.RpbPair
             {
                 key = string.Concat(key, "_int").GetBytes(),
                 value = value.ToString().GetBytes()
@@ -171,7 +177,7 @@ namespace Riak.Driver
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException("key");
 
-            this.Content.indexes.Add(new Messages.RpbPair
+            this._content.indexes.Add(new Messages.RpbPair
             {
                 key = string.Concat(key, "_int").GetBytes(),
                 value = value.ToString().GetBytes()
@@ -190,11 +196,11 @@ namespace Riak.Driver
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException("key");
             if (string.IsNullOrEmpty(value)) throw new ArgumentNullException("value");
-            if (this.Content.indexes.Count == 0) return this;
+            if (this._content.indexes.Count == 0) return this;
 
-            var hits = this.Content.indexes.Where(c => c.key.GetString().StartsWith(key) && c.value.GetString() == value).ToArray();
+            var hits = this._content.indexes.Where(c => c.key.GetString().StartsWith(key) && c.value.GetString() == value).ToArray();
             if (hits.Length == 0) return this;
-            for (int i = 0, l = hits.Length; i < l; i++) this.Content.indexes.Remove(hits[i]);
+            for (int i = 0, l = hits.Length; i < l; i++) this._content.indexes.Remove(hits[i]);
             return this;
         }
         /// <summary>
@@ -207,11 +213,11 @@ namespace Riak.Driver
         public RiakObject RemoveIndex(string key, int value)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException("key");
-            if (this.Content.indexes.Count == 0) return this;
+            if (this._content.indexes.Count == 0) return this;
 
-            var hits = this.Content.indexes.Where(c => c.key.GetString().StartsWith(key) && c.value.GetString() == value.ToString()).ToArray();
+            var hits = this._content.indexes.Where(c => c.key.GetString().StartsWith(key) && c.value.GetString() == value.ToString()).ToArray();
             if (hits.Length == 0) return this;
-            for (int i = 0, l = hits.Length; i < l; i++) this.Content.indexes.Remove(hits[i]);
+            for (int i = 0, l = hits.Length; i < l; i++) this._content.indexes.Remove(hits[i]);
             return this;
         }
         /// <summary>
@@ -224,11 +230,11 @@ namespace Riak.Driver
         public RiakObject RemoveIndex(string key, long value)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException("key");
-            if (this.Content.indexes.Count == 0) return this;
+            if (this._content.indexes.Count == 0) return this;
 
-            var hits = this.Content.indexes.Where(c => c.key.GetString().StartsWith(key) && c.value.GetString() == value.ToString()).ToArray();
+            var hits = this._content.indexes.Where(c => c.key.GetString().StartsWith(key) && c.value.GetString() == value.ToString()).ToArray();
             if (hits.Length == 0) return this;
-            for (int i = 0, l = hits.Length; i < l; i++) this.Content.indexes.Remove(hits[i]);
+            for (int i = 0, l = hits.Length; i < l; i++) this._content.indexes.Remove(hits[i]);
             return this;
         }
         /// <summary>
@@ -240,11 +246,11 @@ namespace Riak.Driver
         public RiakObject RemoveIndex(string key)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException("key");
-            if (this.Content.indexes.Count == 0) return this;
+            if (this._content.indexes.Count == 0) return this;
 
-            var hits = this.Content.indexes.Where(c => c.key.GetString().StartsWith(key)).ToArray();
+            var hits = this._content.indexes.Where(c => c.key.GetString().StartsWith(key)).ToArray();
             if (hits.Length == 0) return this;
-            for (int i = 0, l = hits.Length; i < l; i++) this.Content.indexes.Remove(hits[i]);
+            for (int i = 0, l = hits.Length; i < l; i++) this._content.indexes.Remove(hits[i]);
             return this;
         }
         #endregion
@@ -260,7 +266,7 @@ namespace Riak.Driver
             {
                 bucket = this.Bucket.GetBytes(),
                 key = this.Key,
-                content = this.Content,
+                content = this._content,
                 vclock = this.VectorClock
             };
         }
