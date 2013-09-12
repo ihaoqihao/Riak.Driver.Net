@@ -57,6 +57,7 @@
     <None Include="packages.config" />
     <None Include="riak.config">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <SubType>Designer</SubType>
     </None>
   </ItemGroup>
   <ItemGroup>
