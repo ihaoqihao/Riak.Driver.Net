@@ -1,6 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
-using System.Text;
 using System.Threading;
 using Sodao.FastSocket.Client;
 using Sodao.FastSocket.SocketBase;
@@ -58,8 +58,7 @@ namespace Riak.Driver
         protected override void OnServerPoolServerAvailable(string name, IConnection connection)
         {
             var request = base.DequeueFromPendingQueue();
-            if (request == null) return;
-            base.Send(request);
+            if (request != null) base.Send(request);
         }
         /// <summary>
         /// OnStartSending
@@ -68,8 +67,7 @@ namespace Riak.Driver
         /// <param name="packet"></param>
         protected override void OnStartSending(IConnection connection, Packet packet)
         {
-            connection.UserData = packet;
-            packet.Tag = connection;
+            connection.UserData = packet.Tag;
             base.OnStartSending(connection, packet);
         }
         /// <summary>
@@ -79,8 +77,6 @@ namespace Riak.Driver
         /// <param name="response"></param>
         protected override void OnResponse(IConnection connection, RiakResponse response)
         {
-            var packet = connection.UserData as Packet;
-            if (packet != null) packet.Tag = null;
             connection.UserData = null;
 
             //try send next request from pending queue.
@@ -90,6 +86,16 @@ namespace Riak.Driver
                 if (request == null) { this._serverPool.Release(connection); return; };
                 connection.BeginSend(request);
             });
+        }
+        /// <summary>
+        /// on request receive timeout
+        /// </summary>
+        /// <param name="connection"></param>
+        /// <param name="request"></param>
+        protected override void OnReceiveTimeout(IConnection connection, Request<RiakResponse> request)
+        {
+            connection.BeginDisconnect(new Exception(string.Concat("request.", request.CmdName, " receive time out.")));
+            base.OnReceiveTimeout(connection, request);
         }
         #endregion
 
@@ -130,110 +136,159 @@ namespace Riak.Driver
             return bytes;
         }
         /// <summary>
-        /// Deserialize
+        /// execute
         /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="response"></param>
-        /// <returns></returns>
-        private T Deserialize<T>(RiakResponse response)
-        {
-            if (response.Payload == null || response.Payload.Length == 0) return default(T);
-            using (var ms = new MemoryStream(response.Payload)) return ProtoBuf.Serializer.Deserialize<T>(ms);
-        }
-        /// <summary>
-        /// Execute
-        /// </summary>
-        /// <param name="cmdName"></param>
+        /// <param name="reqCode"></param>
+        /// <param name="respCode"></param>
         /// <param name="bytes"></param>
-        /// <param name="respCode"></param>
         /// <param name="onError"></param>
-        /// <param name="onResponse"></param>
-        /// <exception cref="ArgumentNullException">bytes is null</exception>
-        /// <exception cref="ArgumentNullException">onError is null</exception>
-        /// <exception cref="ArgumentNullException">onResponse is null</exception>
-        private void Execute(string cmdName, byte[] bytes, byte respCode, Action<Exception> onError, Action<RiakResponse> onResponse)
+        /// <param name="onReceive"></param>
+        /// <param name="onCompleted"></param>
+        /// <param name="millisecondsReceiveTimeout"></param>
+        private void Execute(byte reqCode, byte respCode, byte[] bytes,
+            Action<Exception> onError,
+            Func<ArraySegment<byte>, bool> onReceive,
+            Action onCompleted,
+            int millisecondsReceiveTimeout)
         {
-            if (bytes == null) throw new ArgumentNullException("bytes");
-            if (onError == null) throw new ArgumentNullException("onError");
-            if (onResponse == null) throw new ArgumentNullException("onResponse");
+            var seqId = base.NextRequestSeqID();
+            var request = new Request<RiakResponse>(seqId, reqCode.ToString(), bytes, onError, response =>
+            {
+                if (response.Exception == null) { onCompleted(); return; }
+                onError(response.Exception);
+            });
+            request.MillisecondsReceiveTimeout = millisecondsReceiveTimeout;
+            request.Tag = new RiakResponse(seqId, respCode, onReceive);
 
-            Request<RiakResponse> socketRequest = null;
-            this.Send(socketRequest = new Request<RiakResponse>(base.NextRequestSeqID(), cmdName, bytes, ex =>
+            this.Send(request);
+        }
+        /// <summary>
+        /// execute
+        /// </summary>
+        /// <typeparam name="TReq"></typeparam>
+        /// <typeparam name="TResp"></typeparam>
+        /// <param name="reqCode"></param>
+        /// <param name="respCode"></param>
+        /// <param name="request"></param>
+        /// <param name="onError"></param>
+        /// <param name="onCallback"></param>
+        /// <param name="millisecondsReceiveTimeout"></param>
+        public void Execute<TReq, TResp>(byte reqCode, byte respCode, TReq request, Action<Exception> onError, Action<TResp> onCallback,
+            int millisecondsReceiveTimeout)
+        {
+            TResp result = default(TResp);
+            this.Execute(reqCode, respCode, this.Serialize(reqCode, request), onError, arrSeg =>
             {
-                var rex = ex as RequestException;
-                //当receive timeout时，强制断开当前链接
-                if (rex != null && rex.Error == RequestException.Errors.ReceiveTimeout)
-                {
-                    var connection = socketRequest.Tag as IConnection;
-                    if (connection != null) connection.BeginDisconnect();
-                }
-                onError(ex);
+                using (var stream = new MemoryStream(arrSeg.Array, arrSeg.Offset, arrSeg.Count))
+                    result = ProtoBuf.Serializer.Deserialize<TResp>(stream);
+                return true;
             },
-            response =>
+            () => onCallback(result), millisecondsReceiveTimeout);
+        }
+        /// <summary>
+        /// execute
+        /// </summary>
+        /// <typeparam name="TReq"></typeparam>
+        /// <param name="reqCode"></param>
+        /// <param name="respCode"></param>
+        /// <param name="request"></param>
+        /// <param name="onError"></param>
+        /// <param name="onCallback"></param>
+        /// <param name="millisecondsReceiveTimeout"></param>
+        public void Execute<TReq>(byte reqCode, byte respCode, TReq request, Action<Exception> onError, Action onCallback,
+            int millisecondsReceiveTimeout)
+        {
+            this.Execute(reqCode, respCode, this.Serialize(reqCode, request), onError, arrSeg => true,
+                () => onCallback(), millisecondsReceiveTimeout);
+        }
+        /// <summary>
+        /// execute
+        /// </summary>
+        /// <typeparam name="TResp"></typeparam>
+        /// <param name="reqCode"></param>
+        /// <param name="respCode"></param>
+        /// <param name="onError"></param>
+        /// <param name="onCallback"></param>
+        /// <param name="millisecondsReceiveTimeout"></param>
+        public void Execute<TResp>(byte reqCode, byte respCode, Action<Exception> onError, Action<TResp> onCallback, int millisecondsReceiveTimeout)
+        {
+            TResp result = default(TResp);
+            this.Execute(reqCode, respCode, new byte[] { 0, 0, 0, 1, reqCode }, onError, arrSeg =>
             {
-                if (response.MessageCode == Messages.Codes.ErrorResp)
-                {
-                    var error = this.Deserialize<Messages.RpbErrorResp>(response);
-                    onError(new RiakException(error.errcode, Encoding.UTF8.GetString(error.errmsg)));
-                    return;
-                }
-                if (response.MessageCode != respCode)
-                {
-                    onError(new RiakException(string.Concat("invalid response, expected is ", respCode.ToString(), ", but was is ", response.MessageCode.ToString())));
-                    return;
-                }
-                onResponse(response);
-            }));
+                using (var stream = new MemoryStream(arrSeg.Array, arrSeg.Offset, arrSeg.Count))
+                    result = ProtoBuf.Serializer.Deserialize<TResp>(stream);
+                return true;
+            },
+            () => onCallback(result), millisecondsReceiveTimeout);
         }
         /// <summary>
-        /// Execute
+        /// execute
         /// </summary>
-        /// <typeparam name="TRequest"></typeparam>
-        /// <typeparam name="TResponse"></typeparam>
+        /// <param name="reqCode"></param>
+        /// <param name="respCode"></param>
+        /// <param name="onError"></param>
+        /// <param name="onCallback"></param>
+        /// <param name="millisecondsReceiveTimeout"></param>
+        public void Execute(byte reqCode, byte respCode, Action<Exception> onError, Action onCallback, int millisecondsReceiveTimeout)
+        {
+            this.Execute(reqCode, respCode, new byte[] { 0, 0, 0, 1, reqCode }, onError, arrSeg => true,
+                () => onCallback(), millisecondsReceiveTimeout);
+        }
+        /// <summary>
+        /// stream execute
+        /// </summary>
+        /// <typeparam name="TReq"></typeparam>
+        /// <typeparam name="TResp"></typeparam>
         /// <param name="reqCode"></param>
         /// <param name="respCode"></param>
         /// <param name="request"></param>
         /// <param name="onError"></param>
-        /// <param name="callback"></param>
-        public void Execute<TRequest, TResponse>(byte reqCode, byte respCode, TRequest request, Action<Exception> onError, Action<TResponse> callback)
+        /// <param name="isDone"></param>
+        /// <param name="onCallback"></param>
+        /// <param name="millisecondsReceiveTimeout"></param>
+        public void StreamExecute<TReq, TResp>(byte reqCode, byte respCode, TReq request, Action<Exception> onError,
+            Func<TResp, bool> isDone,
+            Action<IEnumerable<TResp>> onCallback,
+            int millisecondsReceiveTimeout)
         {
-            this.Execute(reqCode.ToString(), this.Serialize(reqCode, request), respCode, onError, response => callback(this.Deserialize<TResponse>(response)));
+            var list = new List<TResp>();
+            this.Execute(reqCode, respCode, this.Serialize(reqCode, request), onError, arrSeg =>
+            {
+                TResp result;
+                using (var stream = new MemoryStream(arrSeg.Array, arrSeg.Offset, arrSeg.Count))
+                    result = ProtoBuf.Serializer.Deserialize<TResp>(stream);
+
+                list.Add(result);
+                return isDone(result);
+            },
+            () => onCallback(list), millisecondsReceiveTimeout);
         }
         /// <summary>
-        /// Execute
+        /// stream execute
         /// </summary>
-        /// <typeparam name="TRequest"></typeparam>
-        /// <param name="reqCode"></param>
-        /// <param name="respCode"></param>
-        /// <param name="request"></param>
-        /// <param name="onError"></param>
-        /// <param name="callback"></param>
-        public void Execute<TRequest>(byte reqCode, byte respCode, TRequest request, Action<Exception> onError, Action callback)
-        {
-            this.Execute(reqCode.ToString(), this.Serialize(reqCode, request), respCode, onError, response => callback());
-        }
-        /// <summary>
-        /// Execute
-        /// </summary>
-        /// <typeparam name="TResponse"></typeparam>
-        /// <param name="reqCode"></param>
-        /// <param name="respCode"></param>
-        /// <param name="onError"></param>
-        /// <param name="callback"></param>
-        public void Execute<TResponse>(byte reqCode, byte respCode, Action<Exception> onError, Action<TResponse> callback)
-        {
-            this.Execute(reqCode.ToString(), new byte[] { 0, 0, 0, 1, reqCode }, respCode, onError, response => callback(this.Deserialize<TResponse>(response)));
-        }
-        /// <summary>
-        /// Execute
-        /// </summary>
+        /// <typeparam name="TResp"></typeparam>
         /// <param name="reqCode"></param>
         /// <param name="respCode"></param>
         /// <param name="onError"></param>
-        /// <param name="callback"></param>
-        public void Execute(byte reqCode, byte respCode, Action<Exception> onError, Action callback)
+        /// <param name="isDone"></param>
+        /// <param name="onCallback"></param>
+        /// <param name="millisecondsReceiveTimeout"></param>
+        public void StreamExecute<TResp>(byte reqCode, byte respCode, Action<Exception> onError,
+            Func<TResp, bool> isDone,
+            Action<IEnumerable<TResp>> onCallback,
+            int millisecondsReceiveTimeout)
         {
-            this.Execute(reqCode.ToString(), new byte[] { 0, 0, 0, 1, reqCode }, respCode, onError, response => callback());
+            var list = new List<TResp>();
+            this.Execute(reqCode, respCode, new byte[] { 0, 0, 0, 1, reqCode }, onError, arrSeg =>
+            {
+                TResp result;
+                using (var stream = new MemoryStream(arrSeg.Array, arrSeg.Offset, arrSeg.Count))
+                    result = ProtoBuf.Serializer.Deserialize<TResp>(stream);
+
+                list.Add(result);
+                return isDone(result);
+            },
+            () => onCallback(list), millisecondsReceiveTimeout);
         }
         #endregion
     }

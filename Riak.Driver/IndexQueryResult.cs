@@ -23,10 +23,7 @@ namespace Riak.Driver
         /// <param name="response"></param>
         public IndexQueryResult(Messages.RpbIndexResp response)
         {
-            if (response == null)
-            {
-                this.Results = new IndexTerm[0]; return;
-            }
+            if (response == null) { this.Results = new IndexTerm[0]; return; }
 
             this.Continuation = response.continuation;
             if (response.keys.Count > 0) this.Results = response.keys.Select(c => new IndexTerm(c.GetString())).ToArray();

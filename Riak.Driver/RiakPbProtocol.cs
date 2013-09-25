@@ -1,5 +1,6 @@
 ﻿using System;
-using Sodao.FastSocket.Client;
+using System.IO;
+using System.Text;
 using Sodao.FastSocket.Client.Protocol;
 using Sodao.FastSocket.SocketBase;
 using Sodao.FastSocket.SocketBase.Utils;
@@ -35,17 +36,35 @@ namespace Riak.Driver
             //判断本次接收数据是否完整
             if (readlength > buffer.Count) { readlength = 0; return null; }
 
+            var response = connection.UserData as RiakResponse;
+            if (response == null) throw new BadProtocolException("unknow response.");
+
             //第5个字节为MessageCode
             var messageCode = buffer.Array[buffer.Offset + 4];
-            var bytes = new byte[len - 1];
-            Buffer.BlockCopy(buffer.Array, buffer.Offset + 5, bytes, 0, bytes.Length);
 
-            //try get seqId
-            int seqId = -1;
-            var request = connection.UserData as Request<RiakResponse>;
-            if (request != null) seqId = request.SeqID;
+            //riak error response
+            if (messageCode == Messages.Codes.ErrorResp)
+            {
+                Messages.RpbErrorResp errResp = null;
+                using (var stream = new MemoryStream(buffer.Array, buffer.Offset + 5, len - 1))
+                {
+                    errResp = ProtoBuf.Serializer.Deserialize<Messages.RpbErrorResp>(stream);
+                }
+                response.Exception = new RiakException(errResp.errcode, Encoding.UTF8.GetString(errResp.errmsg));
+                return response;
+            }
+            //message code mismatching
+            if (messageCode != response.MessageCode)
+            {
+                response.Exception = new RiakException(string.Concat(
+                    "invalid response, expected is ", response.MessageCode.ToString(), ", but was is ", messageCode.ToString()));
+                return response;
+            }
 
-            return new RiakResponse(seqId, messageCode, bytes);
+            if (len == 1) return response;
+
+            if (response.OnReceive(new ArraySegment<byte>(buffer.Array, buffer.Offset + 5, len - 1))) return response;
+            else return null;
         }
     }
 }

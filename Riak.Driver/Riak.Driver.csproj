@@ -32,11 +32,16 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="FastSocket.Client">
-      <HintPath>..\packages\fastsocket_client.1.0.0.19\lib\net40\FastSocket.Client.dll</HintPath>
+    <Reference Include="FastSocket.Client, Version=1.0.0.5, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\fastsocket_client.1.0.0.20\lib\net40\FastSocket.Client.dll</HintPath>
     </Reference>
-    <Reference Include="FastSocket.SocketBase">
-      <HintPath>..\packages\fastsocket_base.1.0.0.18\lib\net40\FastSocket.SocketBase.dll</HintPath>
+    <Reference Include="FastSocket.SocketBase, Version=1.0.0.5, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\fastsocket_base.1.0.0.20\lib\net40\FastSocket.SocketBase.dll</HintPath>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>..\packages\Newtonsoft.Json.5.0.6\lib\net40\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="protobuf-net">
       <HintPath>..\packages\protobuf-net.2.0.0.640\lib\net40\protobuf-net.dll</HintPath>
@@ -56,6 +61,7 @@
     <Compile Include="Messages\riak.cs" />
     <Compile Include="Messages\riak_kv.cs" />
     <Compile Include="Messages\riak_search.cs" />
+    <Compile Include="Options.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RiakClient.cs" />
     <Compile Include="RiakClientFactory.cs" />

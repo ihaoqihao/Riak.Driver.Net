@@ -1,4 +1,5 @@
-﻿
+﻿using System;
+
 namespace Riak.Driver
 {
     /// <summary>
@@ -6,19 +7,37 @@ namespace Riak.Driver
     /// </summary>
     public sealed class RiakResponse : Sodao.FastSocket.Client.Response.IResponse
     {
-        private int _seqID;
+        /// <summary>
+        /// get seqId
+        /// </summary>
+        private readonly int _seqId;
+        /// <summary>
+        /// get messageCode
+        /// </summary>
+        public readonly byte MessageCode;
+        /// <summary>
+        /// get onreceive
+        /// </summary>
+        public readonly Func<ArraySegment<byte>, bool> OnReceive;
+        /// <summary>
+        /// get or set <see cref="RiakException"/>
+        /// </summary>
+        public RiakException Exception;
 
         /// <summary>
         /// new
         /// </summary>
         /// <param name="seqId"></param>
         /// <param name="messageCode"></param>
-        /// <param name="payload"></param>
-        public RiakResponse(int seqId, byte messageCode, byte[] payload)
+        /// <param name="onReceive"></param>
+        /// <exception cref="ArgumentNullException">onReceive is null</exception>
+        public RiakResponse(int seqId, byte messageCode, Func<ArraySegment<byte>, bool> onReceive)
         {
-            this._seqID = seqId;
+            if (onReceive == null) throw new ArgumentNullException("onReceive");
+
+            this._seqId = seqId;
             this.MessageCode = messageCode;
-            this.Payload = payload;
+            this.OnReceive = onReceive;
         }
 
         /// <summary>
@@ -26,23 +45,7 @@ namespace Riak.Driver
         /// </summary>
         public int SeqID
         {
-            get { return this._seqID; }
-        }
-        /// <summary>
-        /// get message code
-        /// </summary>
-        public byte MessageCode
-        {
-            get;
-            private set;
-        }
-        /// <summary>
-        /// get payload
-        /// </summary>
-        public byte[] Payload
-        {
-            get;
-            private set;
+            get { return this._seqId; }
         }
     }
 }
