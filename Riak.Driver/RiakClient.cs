@@ -160,7 +160,11 @@ namespace Riak.Driver
                 for (int i = 0, l = arr.Length; i < l; i++)
                 {
                     var t = arr[i];
-                    if (t.IsFaulted) { source.TrySetException(t.Exception.InnerException); break; }
+                    if (t.IsFaulted)
+                    {
+                        source.TrySetException(t.Exception.InnerException);
+                        return;
+                    }
                     arrResult[i] = t.Result;
                 }
                 source.TrySetResult(arrResult);
@@ -271,9 +275,15 @@ namespace Riak.Driver
         /// <param name="millisecondsReceiveTimeout"></param>
         /// <param name="asyncState"></param>
         /// <returns></returns>
-        public Task<IndexQueryResult> IndexQuery(string bucket, string indexName, long minValue, long maxValue,
-            uint maxResults, byte[] continuation = null, bool returnTerms = false,
-            int millisecondsReceiveTimeout = 3000, object asyncState = null)
+        public Task<IndexQueryResult> IndexQuery(string bucket,
+            string indexName,
+            long minValue,
+            long maxValue,
+            uint maxResults,
+            byte[] continuation = null,
+            bool returnTerms = false,
+            int millisecondsReceiveTimeout = 3000,
+            object asyncState = null)
         {
             var source = new TaskCompletionSource<IndexQueryResult>(asyncState);
             this._socket.Execute<RpbIndexReq, RpbIndexResp>(Codes.IndexReq, Codes.IndexResp, new RpbIndexReq
@@ -304,9 +314,14 @@ namespace Riak.Driver
         /// <param name="millisecondsReceiveTimeout"></param>
         /// <param name="asyncState"></param>
         /// <returns></returns>
-        public Task<IndexQueryResult> IndexQuery(string bucket, string indexName, string value,
-            uint maxResults, byte[] continuation = null, bool returnTerms = false,
-            int millisecondsReceiveTimeout = 3000, object asyncState = null)
+        public Task<IndexQueryResult> IndexQuery(string bucket,
+            string indexName,
+            string value,
+            uint maxResults,
+            byte[] continuation = null,
+            bool returnTerms = false,
+            int millisecondsReceiveTimeout = 3000,
+            object asyncState = null)
         {
             var source = new TaskCompletionSource<IndexQueryResult>(asyncState);
             this._socket.Execute<RpbIndexReq, RpbIndexResp>(Codes.IndexReq, Codes.IndexResp, new RpbIndexReq
@@ -340,7 +355,7 @@ namespace Riak.Driver
         public Task<long?> Increment(string bucket,
             string key,
             long amount,
-            Action<CounterUpdateOptions> setOptions,
+            Action<CounterUpdateOptions> setOptions = null,
             int millisecondsReceiveTimeout = 3000,
             object asyncState = null)
         {
@@ -359,7 +374,7 @@ namespace Riak.Driver
         public Task<long?> Increment(string bucket,
             byte[] key,
             long amount,
-            Action<CounterUpdateOptions> setOptions,
+            Action<CounterUpdateOptions> setOptions = null,
             int millisecondsReceiveTimeout = 3000,
             object asyncState = null)
         {
@@ -387,7 +402,7 @@ namespace Riak.Driver
         /// <returns></returns>
         public Task<long?> GetCounter(string bucket,
             string key,
-            Action<CounterGetOptions> setOptions,
+            Action<CounterGetOptions> setOptions = null,
             int millisecondsReceiveTimeout = 3000,
             object asyncState = null)
         {
@@ -404,7 +419,7 @@ namespace Riak.Driver
         /// <returns></returns>
         public Task<long?> GetCounter(string bucket,
             byte[] key,
-            Action<CounterGetOptions> setOptions,
+            Action<CounterGetOptions> setOptions = null,
             int millisecondsReceiveTimeout = 3000,
             object asyncState = null)
         {
