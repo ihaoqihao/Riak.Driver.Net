@@ -75,7 +75,7 @@ namespace Riak.Driver
                 if (this._nodes == null || this._nodes.Length == 0) return null;
 
                 Interlocked.Increment(ref this._connectedCount);
-                node = this._nodes[new Random().Next(this._nodes.Length)];
+                node = this._nodes[(Guid.NewGuid().GetHashCode() & 0x7fffffff) % this._nodes.Length];
             }
 
             this.BeginConnect(node.Item1, node.Item2);
