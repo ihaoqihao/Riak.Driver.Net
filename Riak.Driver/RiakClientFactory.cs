@@ -20,7 +20,6 @@ namespace Riak.Driver
         static public RiakClient Create(string configFile, string endpointName)
         {
             if (string.IsNullOrEmpty(endpointName)) throw new ArgumentNullException("endpointName");
-            if (configFile == null) configFile = string.Empty;
 
             Config.RiakConfigSection config = null;
             if (string.IsNullOrEmpty(configFile)) config = ConfigurationManager.GetSection("riak") as Config.RiakConfigSection;
