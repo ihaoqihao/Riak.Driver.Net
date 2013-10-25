@@ -16,7 +16,6 @@ namespace Riak.Driver
         static private readonly byte[] APPLICATIONJSON = "application/json".GetBytes();
 
         private readonly RiakSocketClient _socket = null;
-        private readonly HashSet<string> _setCounter = new HashSet<string>();
         #endregion
 
         #region Constructors
@@ -379,7 +378,7 @@ namespace Riak.Driver
             object asyncState = null)
         {
             var source = new TaskCompletionSource<long?>(asyncState);
-            var req = new RpbCounterUpdateReq { bucket = bucket.GetBytes(), key = key, amount = amount, };
+            var req = new RpbCounterUpdateReq { bucket = bucket.GetBytes(), key = key, amount = amount, returnvalue = true };
             if (setOptions != null) setOptions(new CounterUpdateOptions(req));
 
             this._socket.Execute<RpbCounterUpdateReq, RpbCounterUpdateResp>(Codes.CounterUpdateReq, Codes.CounterUpdateResp, req,
