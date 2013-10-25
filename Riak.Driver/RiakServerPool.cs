@@ -1,11 +1,11 @@
-﻿using System;
+﻿using Sodao.FastSocket.Client;
+using Sodao.FastSocket.SocketBase;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Threading;
-using Sodao.FastSocket.Client;
-using Sodao.FastSocket.SocketBase;
 
 namespace Riak.Driver
 {
@@ -65,7 +65,11 @@ namespace Riak.Driver
         public IConnection Acquire()
         {
             IConnection connection;
-            if (this._connectionPool.TryPop(out connection)) return connection;
+            while (this._connectionPool.TryPop(out connection))
+            {
+                if (connection.Active) return connection;
+            }
+
             if (Thread.VolatileRead(ref this._connectedCount) >= this._maxPoolSize) return null;
 
             Tuple<string, EndPoint> node = null;
