@@ -1,9 +1,9 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2012
+# Visual Studio Express 2013 for Web
+VisualStudioVersion = 12.0.21005.1
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Riak.Driver", "Riak.Driver\Riak.Driver.csproj", "{898EFCDF-0C6E-4EEC-9985-3544535451B1}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tests", "Tests\Tests.csproj", "{4FBE357D-9A62-4C39-A12B-D44852D52980}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Example", "Example\Example.csproj", "{F56C6324-D516-4BA6-9D2D-CB68CB1B141F}"
 EndProject
@@ -17,10 +17,6 @@ Global
 		{898EFCDF-0C6E-4EEC-9985-3544535451B1}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{898EFCDF-0C6E-4EEC-9985-3544535451B1}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{898EFCDF-0C6E-4EEC-9985-3544535451B1}.Release|Any CPU.Build.0 = Release|Any CPU
-		{4FBE357D-9A62-4C39-A12B-D44852D52980}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{4FBE357D-9A62-4C39-A12B-D44852D52980}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{4FBE357D-9A62-4C39-A12B-D44852D52980}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{4FBE357D-9A62-4C39-A12B-D44852D52980}.Release|Any CPU.Build.0 = Release|Any CPU
 		{F56C6324-D516-4BA6-9D2D-CB68CB1B141F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{F56C6324-D516-4BA6-9D2D-CB68CB1B141F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F56C6324-D516-4BA6-9D2D-CB68CB1B141F}.Release|Any CPU.ActiveCfg = Release|Any CPU

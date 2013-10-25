@@ -11,34 +11,6 @@ namespace Example
             Sodao.FastSocket.SocketBase.Log.Trace.EnableConsole();
 
             var riakClient = Riak.Driver.RiakClientPool.Get("riak.config", "riak1");
-            //riakClient.SetBucketProperties("counter_test", new Riak.Driver.Messages.RpbBucketProps
-            //{
-            //    allow_mult = true
-            //}).Wait();
-
-            riakClient.Increment("counter_test", "ab", 1).ContinueWith(c =>
-            {
-                if (c.IsFaulted) Console.WriteLine(c.Exception.ToString());
-                else Console.WriteLine(c.Result.Value + " ___________________");
-            });
-
-            //riakClient.Get("a", "bbb").ContinueWith(c =>
-            //{
-            //    if (c.IsFaulted) Console.WriteLine(c.Exception.ToString());
-            //    else Console.WriteLine("ok");
-            //});
-            //Console.ReadLine();
-
-            //riakClient.Get("a", "bbb").ContinueWith(c =>
-            //{
-            //    if (c.IsFaulted) Console.WriteLine(c.Exception.ToString());
-            //    else Console.WriteLine("ok");
-            //});
-
-
-            Console.ReadLine();
-
-            return;
 
             int snetCount = 0;
             int receivedCount = 0;
