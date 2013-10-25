@@ -1,10 +1,10 @@
-﻿using System;
+﻿using Sodao.FastSocket.Client;
+using Sodao.FastSocket.SocketBase;
+using Sodao.FastSocket.SocketBase.Utils;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
-using Sodao.FastSocket.Client;
-using Sodao.FastSocket.SocketBase;
-using Sodao.FastSocket.SocketBase.Utils;
 
 namespace Riak.Driver
 {
