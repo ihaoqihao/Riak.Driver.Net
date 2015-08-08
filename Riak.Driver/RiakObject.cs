@@ -1,7 +1,7 @@
-﻿using System;
+﻿using Riak.Driver.Utils;
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using Riak.Driver.Utils;
 
 namespace Riak.Driver
 {
@@ -124,7 +124,6 @@ namespace Riak.Driver
         public byte[][] GetIndex(string key)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException("key");
-
             if (this._content.indexes.Count == 0) return new byte[0][];
             return this._content.indexes.Where(c => c.key.GetString().StartsWith(key)).Select(c => c.value).ToArray();
         }
@@ -140,12 +139,7 @@ namespace Riak.Driver
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException("key");
             if (string.IsNullOrEmpty(value)) throw new ArgumentNullException("value");
-
-            this._content.indexes.Add(new Messages.RpbPair
-            {
-                key = string.Concat(key, "_bin").GetBytes(),
-                value = value.GetBytes()
-            });
+            this._content.indexes.Add(new Messages.RpbPair { key = string.Concat(key, "_bin").GetBytes(), value = value.GetBytes() });
             return this;
         }
         /// <summary>
@@ -158,12 +152,7 @@ namespace Riak.Driver
         public RiakObject AddIndex(string key, int value)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException("key");
-
-            this._content.indexes.Add(new Messages.RpbPair
-            {
-                key = string.Concat(key, "_int").GetBytes(),
-                value = value.ToString().GetBytes()
-            });
+            this._content.indexes.Add(new Messages.RpbPair { key = string.Concat(key, "_int").GetBytes(), value = value.ToString().GetBytes() });
             return this;
         }
         /// <summary>
@@ -176,12 +165,7 @@ namespace Riak.Driver
         public RiakObject AddIndex(string key, long value)
         {
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException("key");
-
-            this._content.indexes.Add(new Messages.RpbPair
-            {
-                key = string.Concat(key, "_int").GetBytes(),
-                value = value.ToString().GetBytes()
-            });
+            this._content.indexes.Add(new Messages.RpbPair { key = string.Concat(key, "_int").GetBytes(), value = value.ToString().GetBytes() });
             return this;
         }
         /// <summary>
@@ -198,9 +182,12 @@ namespace Riak.Driver
             if (string.IsNullOrEmpty(value)) throw new ArgumentNullException("value");
             if (this._content.indexes.Count == 0) return this;
 
-            var hits = this._content.indexes.Where(c => c.key.GetString().StartsWith(key) && c.value.GetString() == value).ToArray();
+            var hits = this._content.indexes.Where(c => c.key.GetString().StartsWith(key, StringComparison.OrdinalIgnoreCase) && c.value.GetString() == value).ToArray();
             if (hits.Length == 0) return this;
-            for (int i = 0, l = hits.Length; i < l; i++) this._content.indexes.Remove(hits[i]);
+
+            for (int i = 0, l = hits.Length; i < l; i++)
+                this._content.indexes.Remove(hits[i]);
+
             return this;
         }
         /// <summary>
@@ -215,9 +202,13 @@ namespace Riak.Driver
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException("key");
             if (this._content.indexes.Count == 0) return this;
 
-            var hits = this._content.indexes.Where(c => c.key.GetString().StartsWith(key) && c.value.GetString() == value.ToString()).ToArray();
+            var hits = this._content.indexes.Where(c => c.key.GetString().StartsWith(key, StringComparison.OrdinalIgnoreCase) &&
+                c.value.GetString() == value.ToString()).ToArray();
             if (hits.Length == 0) return this;
-            for (int i = 0, l = hits.Length; i < l; i++) this._content.indexes.Remove(hits[i]);
+
+            for (int i = 0, l = hits.Length; i < l; i++)
+                this._content.indexes.Remove(hits[i]);
+
             return this;
         }
         /// <summary>
@@ -232,9 +223,13 @@ namespace Riak.Driver
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException("key");
             if (this._content.indexes.Count == 0) return this;
 
-            var hits = this._content.indexes.Where(c => c.key.GetString().StartsWith(key) && c.value.GetString() == value.ToString()).ToArray();
+            var hits = this._content.indexes.Where(c => c.key.GetString().StartsWith(key, StringComparison.OrdinalIgnoreCase) &&
+                c.value.GetString() == value.ToString()).ToArray();
             if (hits.Length == 0) return this;
-            for (int i = 0, l = hits.Length; i < l; i++) this._content.indexes.Remove(hits[i]);
+
+            for (int i = 0, l = hits.Length; i < l; i++)
+                this._content.indexes.Remove(hits[i]);
+
             return this;
         }
         /// <summary>
@@ -248,9 +243,12 @@ namespace Riak.Driver
             if (string.IsNullOrEmpty(key)) throw new ArgumentNullException("key");
             if (this._content.indexes.Count == 0) return this;
 
-            var hits = this._content.indexes.Where(c => c.key.GetString().StartsWith(key)).ToArray();
+            var hits = this._content.indexes.Where(c => c.key.GetString().StartsWith(key, StringComparison.OrdinalIgnoreCase)).ToArray();
             if (hits.Length == 0) return this;
-            for (int i = 0, l = hits.Length; i < l; i++) this._content.indexes.Remove(hits[i]);
+
+            for (int i = 0, l = hits.Length; i < l; i++)
+                this._content.indexes.Remove(hits[i]);
+
             return this;
         }
         #endregion

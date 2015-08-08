@@ -1,5 +1,6 @@
-﻿using System.Linq;
-using Riak.Driver.Utils;
+﻿using Riak.Driver.Utils;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace Riak.Driver
 {
@@ -8,6 +9,7 @@ namespace Riak.Driver
     /// </summary>
     public sealed class IndexQueryResult
     {
+        #region Members
         /// <summary>
         /// get continuation
         /// </summary>
@@ -15,53 +17,60 @@ namespace Riak.Driver
         /// <summary>
         /// get results
         /// </summary>
-        public readonly IndexTerm[] Results;
+        public readonly KeyValuePair<string, string>[] Results;
+        #endregion
 
+        #region Constructors
         /// <summary>
         /// new
         /// </summary>
         /// <param name="response"></param>
         public IndexQueryResult(Messages.RpbIndexResp response)
         {
-            if (response == null) { this.Results = new IndexTerm[0]; return; }
+            if (response == null) return;
 
             this.Continuation = response.continuation;
-            if (response.keys.Count > 0) this.Results = response.keys.Select(c => new IndexTerm(c.GetString())).ToArray();
-            else this.Results = response.results.Select(c => new IndexTerm(c.value.GetString(), c.key.GetString())).ToArray();
+            this.Results = response.keys.Count > 0 ?
+                response.keys.Select(c => new KeyValuePair<string, string>(c.GetString(), null)).ToArray() :
+                response.results.Select(c => new KeyValuePair<string, string>(c.key.GetString(), c.value.GetString())).ToArray();
         }
+        #endregion
+    }
 
+    /// <summary>
+    /// index query result
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    public sealed class IndexQueryResult<T>
+    {
+        #region Members
         /// <summary>
-        /// term
+        /// get continuation
         /// </summary>
-        public class IndexTerm
-        {
-            /// <summary>
-            /// get key
-            /// </summary>
-            public readonly string Key;
-            /// <summary>
-            /// get value
-            /// </summary>
-            public readonly string Term;
+        public readonly string Continuation;
+        /// <summary>
+        /// result array
+        /// </summary>
+        public readonly List<T> Results;
+        #endregion
 
-            /// <summary>
-            /// new
-            /// </summary>
-            /// <param name="key"></param>
-            public IndexTerm(string key)
-            {
-                this.Key = key;
-            }
-            /// <summary>
-            /// new
-            /// </summary>
-            /// <param name="key"></param>
-            /// <param name="term"></param>
-            public IndexTerm(string key, string term)
-            {
-                this.Key = key;
-                this.Term = term;
-            }
+        #region Constructors
+        /// <summary>
+        /// new
+        /// </summary>
+        public IndexQueryResult()
+        {
         }
+        /// <summary>
+        /// new
+        /// </summary>
+        /// <param name="continuation"></param>
+        /// <param name="results"></param>
+        public IndexQueryResult(string continuation, List<T> results)
+        {
+            this.Continuation = continuation;
+            this.Results = results;
+        }
+        #endregion
     }
 }

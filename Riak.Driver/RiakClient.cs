@@ -338,6 +338,143 @@ namespace Riak.Driver
             millisecondsReceiveTimeout);
             return source.Task;
         }
+        /// <summary>
+        /// index query
+        /// </summary>
+        /// <typeparam name="TResult"></typeparam>
+        /// <param name="bucket"></param>
+        /// <param name="indexName"></param>
+        /// <param name="minValue"></param>
+        /// <param name="maxValue"></param>
+        /// <param name="limit"></param>
+        /// <param name="continuation"></param>
+        /// <param name="valueFactory"></param>
+        /// <param name="asyncState"></param>
+        /// <returns></returns>
+        public Task<IndexQueryResult<TResult>> IndexQuery<TResult>(string bucket, string indexName,
+            long minValue, long maxValue, uint limit, string continuation,
+            Func<RiakObject, TResult> valueFactory,
+            object asyncState = null)
+        {
+            var source = new TaskCompletionSource<IndexQueryResult<TResult>>(asyncState);
+
+            byte[] bytesCont = null;
+            if (!string.IsNullOrEmpty(continuation)) bytesCont = Convert.FromBase64String(continuation);
+            //index query
+            this.IndexQuery(bucket, indexName, minValue, maxValue, limit, bytesCont).ContinueWith(tidx =>
+            {
+                if (tidx.IsFaulted)
+                {
+                    source.TrySetException(tidx.Exception);
+                    return;
+                }
+
+                var idxResult = tidx.Result;
+                if (idxResult == null || idxResult.Results == null || idxResult.Results.Length == 0)
+                {
+                    source.TrySetResult(new IndexQueryResult<TResult>());
+                    return;
+                }
+
+                //mget riak object
+                this.Get(bucket, idxResult.Results.Select(c => c.Key).ToArray()).ContinueWith(tarrObj =>
+                {
+                    if (tarrObj.IsFaulted)
+                    {
+                        source.TrySetException(tarrObj.Exception);
+                        return;
+                    }
+
+                    var arrObj = tarrObj.Result;
+                    if (arrObj == null || arrObj.Length == 0)
+                    {
+                        source.TrySetResult(new IndexQueryResult<TResult>());
+                        return;
+                    }
+
+                    List<TResult> result = null;
+                    try { result = arrObj.Select(r => valueFactory(r)).ToList(); }
+                    catch (Exception ex)
+                    {
+                        source.TrySetException(ex);
+                        return;
+                    }
+
+                    string strContinuation = null;
+                    if (idxResult.Continuation != null) strContinuation = Convert.ToBase64String(idxResult.Continuation);
+                    source.TrySetResult(new IndexQueryResult<TResult>(strContinuation, result));
+                });
+            });
+            return source.Task;
+        }
+        /// <summary>
+        /// index query
+        /// </summary>
+        /// <typeparam name="TResult"></typeparam>
+        /// <param name="bucket"></param>
+        /// <param name="indexName"></param>
+        /// <param name="value"></param>
+        /// <param name="limit"></param>
+        /// <param name="continuation"></param>
+        /// <param name="valueFactory"></param>
+        /// <param name="asyncState"></param>
+        /// <returns></returns>
+        public Task<IndexQueryResult<TResult>> IndexQuery<TResult>(string bucket, string indexName, string value,
+            uint limit, string continuation,
+            Func<RiakObject, TResult> valueFactory,
+            object asyncState = null)
+        {
+            var source = new TaskCompletionSource<IndexQueryResult<TResult>>(asyncState);
+
+            byte[] bytesCont = null;
+            if (!string.IsNullOrEmpty(continuation)) bytesCont = Convert.FromBase64String(continuation);
+            //index query
+            this.IndexQuery(bucket, indexName, value, limit, bytesCont).ContinueWith(tidx =>
+            {
+                if (tidx.IsFaulted)
+                {
+                    source.TrySetException(tidx.Exception);
+                    return;
+                }
+
+                var idxResult = tidx.Result;
+                if (idxResult == null || idxResult.Results == null || idxResult.Results.Length == 0)
+                {
+                    source.TrySetResult(new IndexQueryResult<TResult>());
+                    return;
+                }
+
+                //mget riak object
+                this.Get(bucket, idxResult.Results.Select(c => c.Key).ToArray()).ContinueWith(tarrObj =>
+                {
+                    if (tarrObj.IsFaulted)
+                    {
+                        source.TrySetException(tarrObj.Exception);
+                        return;
+                    }
+
+                    var arrObj = tarrObj.Result;
+                    if (arrObj == null || arrObj.Length == 0)
+                    {
+                        source.TrySetResult(new IndexQueryResult<TResult>());
+                        return;
+                    }
+
+                    List<TResult> result = null;
+                    try { result = arrObj.Select(r => valueFactory(r)).ToList(); }
+                    catch (Exception ex)
+                    {
+                        source.TrySetException(ex);
+                        return;
+                    }
+
+                    string strContinuation = null;
+                    if (idxResult.Continuation != null) strContinuation = Convert.ToBase64String(idxResult.Continuation);
+                    source.TrySetResult(new IndexQueryResult<TResult>(strContinuation, result));
+                });
+            });
+            return source.Task;
+        }
         #endregion
 
         #region Counter
