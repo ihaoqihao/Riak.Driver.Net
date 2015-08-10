@@ -35,11 +35,13 @@ namespace Riak.Driver
                 clientConfig.MessageBufferSize,
                 clientConfig.MillisecondsSendTimeout,
                 clientConfig.MillisecondsReceiveTimeout);
-            riakSocket.MaxPoolSize = clientConfig.MaxPoolSize;
             //register server.
             foreach (Config.ServerConfig server in clientConfig.Servers)
-                riakSocket.RegisterServerNode(string.Concat(server.Host, server.Port), new IPEndPoint(IPAddress.Parse(server.Host), server.Port));
-
+                for (int i = 0; i < 20; i++)
+                {
+                    riakSocket.TryRegisterEndPoint(string.Concat(server.Host, ":", server.Port, ":", i.ToString()),
+                        new[] { new IPEndPoint(IPAddress.Parse(server.Host), server.Port) });
+                }
             return new RiakClient(riakSocket);
         }
     }

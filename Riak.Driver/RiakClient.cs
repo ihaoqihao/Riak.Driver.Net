@@ -1,9 +1,9 @@
-﻿using System;
+﻿using Riak.Driver.Messages;
+using Riak.Driver.Utils;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Riak.Driver.Messages;
-using Riak.Driver.Utils;
 
 namespace Riak.Driver
 {
@@ -14,7 +14,6 @@ namespace Riak.Driver
     {
         #region Private Members
         static private readonly byte[] APPLICATIONJSON = "application/json".GetBytes();
-
         private readonly RiakSocketClient _socket = null;
         #endregion
 

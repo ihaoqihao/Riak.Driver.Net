@@ -4,19 +4,14 @@ using Sodao.FastSocket.SocketBase.Utils;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Threading;
 
 namespace Riak.Driver
 {
     /// <summary>
     /// riak socket client
     /// </summary>
-    public sealed class RiakSocketClient : PooledSocketClient<RiakResponse>
+    public sealed class RiakSocketClient : SocketClient<RiakResponse>
     {
-        #region Private Members
-        private RiakServerPool _serverPool = null;
-        #endregion
-
         #region Constructors
         /// <summary>
         /// new
@@ -43,24 +38,6 @@ namespace Riak.Driver
 
         #region Override Methods
         /// <summary>
-        /// init server pool
-        /// </summary>
-        /// <returns></returns>
-        protected override IServerPool InitServerPool()
-        {
-            return this._serverPool = new RiakServerPool(this);
-        }
-        /// <summary>
-        /// OnServerPoolServerAvailable
-        /// </summary>
-        /// <param name="name"></param>
-        /// <param name="connection"></param>
-        protected override void OnServerPoolServerAvailable(string name, IConnection connection)
-        {
-            var request = base.DequeueFromPendingQueue();
-            if (request != null) base.Send(request);
-        }
-        /// <summary>
         /// OnStartSending
         /// </summary>
         /// <param name="connection"></param>
@@ -69,44 +46,6 @@ namespace Riak.Driver
         {
             connection.UserData = packet.Tag;
             base.OnStartSending(connection, packet);
-        }
-        /// <summary>
-        /// OnResponse
-        /// </summary>
-        /// <param name="connection"></param>
-        /// <param name="response"></param>
-        protected override void OnResponse(IConnection connection, RiakResponse response)
-        {
-            connection.UserData = null;
-
-            //try send next request from pending queue.
-            ThreadPool.QueueUserWorkItem(_ =>
-            {
-                var request = base.DequeueFromPendingQueue();
-                if (request == null) { this._serverPool.Release(connection); return; };
-                connection.BeginSend(request);
-            });
-        }
-        /// <summary>
-        /// on request receive timeout
-        /// </summary>
-        /// <param name="connection"></param>
-        /// <param name="request"></param>
-        protected override void OnReceiveTimeout(IConnection connection, Request<RiakResponse> request)
-        {
-            connection.BeginDisconnect(new Exception(string.Concat("request.", request.CmdName, " receive time out.")));
-            base.OnReceiveTimeout(connection, request);
-        }
-        #endregion
-
-        #region Public Properties
-        /// <summary>
-        /// get or set max pool size
-        /// </summary>
-        public int MaxPoolSize
-        {
-            get { return this._serverPool.MaxPoolSize; }
-            set { this._serverPool.MaxPoolSize = value; }
         }
         #endregion
 
@@ -146,20 +85,20 @@ namespace Riak.Driver
         /// <param name="onCompleted"></param>
         /// <param name="millisecondsReceiveTimeout"></param>
         private void Execute(byte reqCode, byte respCode, byte[] bytes,
-            Action<Exception> onError,
-            Func<ArraySegment<byte>, bool> onReceive,
-            Action onCompleted,
+            Action<Exception> onError, Func<ArraySegment<byte>, bool> onReceive, Action onCompleted,
             int millisecondsReceiveTimeout)
         {
-            var seqId = base.NextRequestSeqID();
-            var request = new Request<RiakResponse>(seqId, reqCode.ToString(), bytes, onError, response =>
-            {
-                if (response.Exception == null) { onCompleted(); return; }
-                onError(response.Exception);
-            });
-            request.MillisecondsReceiveTimeout = millisecondsReceiveTimeout;
-            request.Tag = new RiakResponse(seqId, respCode, onReceive);
-
+            var request = base.NewRequest(reqCode.ToString(), bytes, millisecondsReceiveTimeout,
+                onError, response =>
+                {
+                    if (response.Exception == null)
+                    {
+                        onCompleted();
+                        return;
+                    }
+                    onError(response.Exception);
+                });
+            request.Tag = new RiakResponse(request.SeqID, respCode, onReceive);
             this.Send(request);
         }
         /// <summary>
@@ -173,17 +112,21 @@ namespace Riak.Driver
         /// <param name="onError"></param>
         /// <param name="onCallback"></param>
         /// <param name="millisecondsReceiveTimeout"></param>
-        public void Execute<TReq, TResp>(byte reqCode, byte respCode, TReq request, Action<Exception> onError, Action<TResp> onCallback,
+        public void Execute<TReq, TResp>(byte reqCode, byte respCode, TReq request,
+            Action<Exception> onError, Action<TResp> onCallback,
             int millisecondsReceiveTimeout)
         {
             TResp result = default(TResp);
-            this.Execute(reqCode, respCode, this.Serialize(reqCode, request), onError, arrSeg =>
-            {
-                using (var stream = new MemoryStream(arrSeg.Array, arrSeg.Offset, arrSeg.Count))
-                    result = ProtoBuf.Serializer.Deserialize<TResp>(stream);
-                return true;
-            },
-            () => onCallback(result), millisecondsReceiveTimeout);
+            this.Execute(reqCode, respCode, this.Serialize(reqCode, request),
+                onError, arrSeg =>
+                {
+                    using (var stream = new MemoryStream(arrSeg.Array, arrSeg.Offset, arrSeg.Count))
+                        result = ProtoBuf.Serializer.Deserialize<TResp>(stream);
+
+                    return true;
+                },
+                () => onCallback(result),
+                millisecondsReceiveTimeout);
         }
         /// <summary>
         /// execute
@@ -195,11 +138,13 @@ namespace Riak.Driver
         /// <param name="onError"></param>
         /// <param name="onCallback"></param>
         /// <param name="millisecondsReceiveTimeout"></param>
-        public void Execute<TReq>(byte reqCode, byte respCode, TReq request, Action<Exception> onError, Action onCallback,
+        public void Execute<TReq>(byte reqCode, byte respCode, TReq request,
+            Action<Exception> onError, Action onCallback,
             int millisecondsReceiveTimeout)
         {
-            this.Execute(reqCode, respCode, this.Serialize(reqCode, request), onError, arrSeg => true,
-                () => onCallback(), millisecondsReceiveTimeout);
+            this.Execute(reqCode, respCode, this.Serialize(reqCode, request),
+                onError, arrSeg => true, () => onCallback(),
+                millisecondsReceiveTimeout);
         }
         /// <summary>
         /// execute
@@ -210,16 +155,21 @@ namespace Riak.Driver
         /// <param name="onError"></param>
         /// <param name="onCallback"></param>
         /// <param name="millisecondsReceiveTimeout"></param>
-        public void Execute<TResp>(byte reqCode, byte respCode, Action<Exception> onError, Action<TResp> onCallback, int millisecondsReceiveTimeout)
+        public void Execute<TResp>(byte reqCode, byte respCode,
+            Action<Exception> onError, Action<TResp> onCallback,
+            int millisecondsReceiveTimeout)
         {
             TResp result = default(TResp);
-            this.Execute(reqCode, respCode, new byte[] { 0, 0, 0, 1, reqCode }, onError, arrSeg =>
-            {
-                using (var stream = new MemoryStream(arrSeg.Array, arrSeg.Offset, arrSeg.Count))
-                    result = ProtoBuf.Serializer.Deserialize<TResp>(stream);
-                return true;
-            },
-            () => onCallback(result), millisecondsReceiveTimeout);
+            this.Execute(reqCode, respCode, new byte[] { 0, 0, 0, 1, reqCode },
+                onError, arrSeg =>
+                {
+                    using (var stream = new MemoryStream(arrSeg.Array, arrSeg.Offset, arrSeg.Count))
+                        result = ProtoBuf.Serializer.Deserialize<TResp>(stream);
+
+                    return true;
+                },
+                () => onCallback(result),
+                millisecondsReceiveTimeout);
         }
         /// <summary>
         /// execute
@@ -229,10 +179,13 @@ namespace Riak.Driver
         /// <param name="onError"></param>
         /// <param name="onCallback"></param>
         /// <param name="millisecondsReceiveTimeout"></param>
-        public void Execute(byte reqCode, byte respCode, Action<Exception> onError, Action onCallback, int millisecondsReceiveTimeout)
+        public void Execute(byte reqCode, byte respCode,
+            Action<Exception> onError, Action onCallback,
+            int millisecondsReceiveTimeout)
         {
-            this.Execute(reqCode, respCode, new byte[] { 0, 0, 0, 1, reqCode }, onError, arrSeg => true,
-                () => onCallback(), millisecondsReceiveTimeout);
+            this.Execute(reqCode, respCode, new byte[] { 0, 0, 0, 1, reqCode },
+                onError, arrSeg => true, () => onCallback(),
+                millisecondsReceiveTimeout);
         }
         /// <summary>
         /// stream execute
@@ -246,22 +199,23 @@ namespace Riak.Driver
         /// <param name="isDone"></param>
         /// <param name="onCallback"></param>
         /// <param name="millisecondsReceiveTimeout"></param>
-        public void StreamExecute<TReq, TResp>(byte reqCode, byte respCode, TReq request, Action<Exception> onError,
-            Func<TResp, bool> isDone,
-            Action<IEnumerable<TResp>> onCallback,
+        public void StreamExecute<TReq, TResp>(byte reqCode, byte respCode, TReq request,
+            Action<Exception> onError, Func<TResp, bool> isDone, Action<IEnumerable<TResp>> onCallback,
             int millisecondsReceiveTimeout)
         {
             var list = new List<TResp>();
-            this.Execute(reqCode, respCode, this.Serialize(reqCode, request), onError, arrSeg =>
-            {
-                TResp result;
-                using (var stream = new MemoryStream(arrSeg.Array, arrSeg.Offset, arrSeg.Count))
-                    result = ProtoBuf.Serializer.Deserialize<TResp>(stream);
+            this.Execute(reqCode, respCode, this.Serialize(reqCode, request),
+                onError, arrSeg =>
+                {
+                    TResp result;
+                    using (var stream = new MemoryStream(arrSeg.Array, arrSeg.Offset, arrSeg.Count))
+                        result = ProtoBuf.Serializer.Deserialize<TResp>(stream);
 
-                list.Add(result);
-                return isDone(result);
-            },
-            () => onCallback(list), millisecondsReceiveTimeout);
+                    list.Add(result);
+                    return isDone(result);
+                },
+                () => onCallback(list),
+                millisecondsReceiveTimeout);
         }
         /// <summary>
         /// stream execute
@@ -279,16 +233,18 @@ namespace Riak.Driver
             int millisecondsReceiveTimeout)
         {
             var list = new List<TResp>();
-            this.Execute(reqCode, respCode, new byte[] { 0, 0, 0, 1, reqCode }, onError, arrSeg =>
-            {
-                TResp result;
-                using (var stream = new MemoryStream(arrSeg.Array, arrSeg.Offset, arrSeg.Count))
-                    result = ProtoBuf.Serializer.Deserialize<TResp>(stream);
+            this.Execute(reqCode, respCode, new byte[] { 0, 0, 0, 1, reqCode },
+                onError, arrSeg =>
+                {
+                    TResp result;
+                    using (var stream = new MemoryStream(arrSeg.Array, arrSeg.Offset, arrSeg.Count))
+                        result = ProtoBuf.Serializer.Deserialize<TResp>(stream);
 
-                list.Add(result);
-                return isDone(result);
-            },
-            () => onCallback(list), millisecondsReceiveTimeout);
+                    list.Add(result);
+                    return isDone(result);
+                },
+                () => onCallback(list),
+                millisecondsReceiveTimeout);
         }
         #endregion
     }

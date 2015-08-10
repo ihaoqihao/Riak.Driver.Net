@@ -5,12 +5,12 @@ namespace Riak.Driver
     /// <summary>
     /// riak response
     /// </summary>
-    public sealed class RiakResponse : Sodao.FastSocket.Client.Response.IResponse
+    public sealed class RiakResponse : Sodao.FastSocket.Client.Messaging.IMessage
     {
         /// <summary>
-        /// get seqId
+        /// get seqID
         /// </summary>
-        private readonly int _seqId;
+        private readonly int _seqID;
         /// <summary>
         /// get messageCode
         /// </summary>
@@ -27,15 +27,15 @@ namespace Riak.Driver
         /// <summary>
         /// new
         /// </summary>
-        /// <param name="seqId"></param>
+        /// <param name="seqID"></param>
         /// <param name="messageCode"></param>
         /// <param name="onReceive"></param>
         /// <exception cref="ArgumentNullException">onReceive is null</exception>
-        public RiakResponse(int seqId, byte messageCode, Func<ArraySegment<byte>, bool> onReceive)
+        public RiakResponse(int seqID, byte messageCode, Func<ArraySegment<byte>, bool> onReceive)
         {
             if (onReceive == null) throw new ArgumentNullException("onReceive");
 
-            this._seqId = seqId;
+            this._seqID = seqID;
             this.MessageCode = messageCode;
             this.OnReceive = onReceive;
         }
@@ -45,7 +45,7 @@ namespace Riak.Driver
         /// </summary>
         public int SeqID
         {
-            get { return this._seqId; }
+            get { return this._seqID; }
         }
     }
 }
